@@ -17,7 +17,7 @@
     <maven.compiler.source>11</maven.compiler.source>
     <maven.compiler.target>11</maven.compiler.target>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <bytecoder.version>2024-05-10</bytecoder.version>
+    <bytecoder.version>2023-05-19</bytecoder.version>
   </properties>
 
   <dependencies>

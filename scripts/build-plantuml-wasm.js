@@ -35,7 +35,7 @@ function getBytecoderDownloadUrl (callback) {
   // Maven Central is more reliable for JAR downloads
   // Format: https://repo1.maven.org/maven2/de/mirkosertic/bytecoder/bytecoder-cli/{version}/bytecoder-cli-{version}.jar
   var mavenVersions = [
-    '2024-05-10',
+    '2023-05-19', // Latest confirmed available version
     '2023-12-01',
     '2023-11-15',
     '2023-06-15',

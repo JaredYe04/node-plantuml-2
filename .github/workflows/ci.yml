@@ -38,6 +38,10 @@ jobs:
       - name: Build
         run: npm run build || echo "No build script found, skipping"
 
+      - name: Build WASM (optional)
+        run: npm run build:wasm || echo "WASM build failed, continuing (experimental feature)"
+        continue-on-error: true
+
       - name: Run linting
         run: npx standard --fix || echo "Linting issues found"
 
