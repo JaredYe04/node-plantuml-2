@@ -181,9 +181,12 @@ jobs:
 
       - name: Build Wasm module (required for pure Node.js)
         continue-on-error: false
+        env:
+          BUILD_METHOD: bytecoder
         run: |
-          echo "🔨 Building Wasm module (this may take several minutes)..."
+          echo "🔨 Building Wasm module using Bytecoder CLI (this may take several minutes)..."
           echo "📦 This is required for pure Node.js operation without Java dependency"
+          echo "💡 Using Bytecoder CLI method (Maven plugin is not available in Central)"
           npm run build:wasm:bytecoder
           if [ ! -f vendor/wasm/plantuml.wasm ]; then
             echo "❌ Error: Wasm module not found after build"
