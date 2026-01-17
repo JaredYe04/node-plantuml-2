@@ -1,6 +1,6 @@
 {
   "name": "node-plantuml-2",
-  "version": "0.9.0",
+  "version": "1.0.1",
   "plantumlVersion": "1.2026.0",
   "description": "Pure Node.js PlantUML renderer - No Java required! Multiple output formats (PNG, SVG, EPS, ASCII, Unicode) with full UTF-8 support",
   "main": "index.js",
