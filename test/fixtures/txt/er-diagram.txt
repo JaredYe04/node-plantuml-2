@@ -1,0 +1,57 @@
+@startuml
+!theme amiga
+
+skinparam defaultFontSize 12
+entity "用户表" as user {
+  * id : BIGINT <<PK>>
+  --
+  * username : VARCHAR(50)
+  * email : VARCHAR(100)
+  * password : VARCHAR(255)
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+entity "订单表" as order {
+  * id : BIGINT <<PK>>
+  --
+  * user_id : BIGINT <<FK>>
+  * order_no : VARCHAR(50)
+  * total_amount : DECIMAL(10,2)
+  * status : VARCHAR(20)
+  created_at : TIMESTAMP
+}
+
+entity "订单项表" as order_item {
+  * id : BIGINT <<PK>>
+  --
+  * order_id : BIGINT <<FK>>
+  * product_id : BIGINT <<FK>>
+  * quantity : INT
+  * price : DECIMAL(10,2)
+}
+
+entity "商品表" as product {
+  * id : BIGINT <<PK>>
+  --
+  * name : VARCHAR(200)
+  * price : DECIMAL(10,2)
+  * stock : INT
+  * category_id : BIGINT <<FK>>
+}
+
+entity "分类表" as category {
+  * id : BIGINT <<PK>>
+  --
+  * name : VARCHAR(100)
+  * parent_id : BIGINT <<FK>>
+}
+
+user ||--o{ order : "一个用户可以有多个订单"
+order ||--|{ order_item : "一个订单包含多个订单项"
+order_item }o--|| product : "一个订单项对应一个商品"
+product }o--|| category : "一个商品属于一个分类"
+category ||--o{ category : "分类可以有子分类"
+
+@enduml
+

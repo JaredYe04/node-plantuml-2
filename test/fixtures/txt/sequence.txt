@@ -1,0 +1,15 @@
+@startuml
+participant "客户端" as Client
+participant "服务器" as Server
+participant "数据库" as DB
+
+Client -> Server: 发送请求\n(包含中文)
+activate Server
+Server -> DB: 查询数据
+activate DB
+DB --> Server: 返回结果
+deactivate DB
+Server --> Client: 响应数据\n(支持中文显示)
+deactivate Server
+@enduml
+

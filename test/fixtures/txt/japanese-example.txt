@@ -1,0 +1,38 @@
+@startuml
+!theme reddress-darkred
+
+skinparam defaultFontSize 12
+title 日本語の例 / Japanese Example
+
+class ユーザー {
+  -名前: String
+  -メール: String
+  +ログイン()
+  +ログアウト()
+}
+
+class 注文 {
+  -注文番号: String
+  -金額: Double
+  -状態: String
+  +作成()
+  +支払い()
+}
+
+class 商品 {
+  -商品名: String
+  -価格: Double
+  -在庫: Integer
+  +在庫確認()
+}
+
+ユーザー "1" --> "0..*" 注文 : 作成する
+注文 "1" --> "1..*" 商品 : 含む
+
+note right of ユーザー
+  ユーザーは注文を
+  作成できます
+end note
+
+@enduml
+

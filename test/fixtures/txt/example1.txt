@@ -1,0 +1,7 @@
+@startuml
+Alice -> Bob: 你好，世界！
+Bob -> Alice: Hello, World!
+note right of Alice: 这是中文测试
+note left of Bob: This is English test
+@enduml
+

@@ -1,0 +1,18 @@
+@startuml
+class 用户 {
+  -姓名: String
+  -年龄: Integer
+  +登录()
+  +登出()
+}
+
+class 订单 {
+  -订单号: String
+  -金额: Double
+  +创建()
+  +支付()
+}
+
+用户 "1" --> "0..*" 订单
+@enduml
+

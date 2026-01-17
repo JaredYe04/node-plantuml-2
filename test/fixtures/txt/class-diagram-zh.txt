@@ -1,0 +1,50 @@
+@startuml
+!theme plain
+
+skinparam defaultFontSize 12
+skinparam classAttributeIconSize 0
+
+class 用户 {
+  -id: Long
+  -用户名: String
+  -邮箱: String
+  -密码: String
+  +登录()
+  +登出()
+  +修改密码()
+}
+
+class 订单 {
+  -订单号: String
+  -创建时间: Date
+  -总金额: Double
+  -状态: OrderStatus
+  +创建订单()
+  +支付()
+  +取消()
+}
+
+class 商品 {
+  -商品ID: Long
+  -名称: String
+  -价格: Double
+  -库存: Integer
+  +查询库存()
+  +更新库存()
+}
+
+class 购物车 {
+  -商品列表: List<商品>
+  -总价: Double
+  +添加商品()
+  +移除商品()
+  +结算()
+}
+
+用户 "1" --> "0..*" 订单 : 拥有
+订单 "1" --> "1..*" 商品 : 包含
+用户 "1" --> "1" 购物车 : 使用
+购物车 "1" --> "*" 商品 : 包含
+
+@enduml
+

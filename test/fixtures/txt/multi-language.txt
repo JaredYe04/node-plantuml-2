@@ -1,0 +1,37 @@
+@startuml
+!theme aws-orange
+
+skinparam defaultFontSize 12
+title Multi-Language Example / 多语言示例 / 多言語の例
+
+class User {
+  -name: String
+  -email: String
+  +login()
+  +logout()
+}
+
+class 订单_Order_注文 as Order {
+  -orderId: String
+  -amount: Double
+  +create()
+  +pay()
+}
+
+class Product_产品_製品 as Product {
+  -name: String
+  -price: Double
+  +getPrice()
+}
+
+User --> Order : creates
+Order --> Product : contains
+
+note right of User
+  English: User can create orders
+  中文: 用户可以创建订单
+  Japanese: ユーザーは注文を作成できます
+end note
+
+@enduml
+

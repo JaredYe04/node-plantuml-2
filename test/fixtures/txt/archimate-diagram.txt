@@ -1,0 +1,37 @@
+@startuml
+!theme toy
+skinparam linetype ortho
+
+rectangle "Business Layer" as business {
+  [Customer Service] as cs
+  [Order Management] as om
+  [Product Catalog] as pc
+}
+
+rectangle "Application Layer" as app {
+  [Web Application] as web
+  [Mobile App] as mobile
+  [API Gateway] as api
+}
+
+rectangle "Technology Layer" as tech {
+  [Application Server] as appServer
+  [Database Server] as dbServer
+  [Cache Server] as cache
+}
+
+cs --> web
+om --> web
+pc --> web
+cs --> mobile
+om --> mobile
+pc --> mobile
+
+web --> api
+mobile --> api
+api --> appServer
+appServer --> dbServer
+appServer --> cache
+
+@enduml
+

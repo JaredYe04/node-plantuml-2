@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>net.sourceforge.plantuml</groupId>
+  <artifactId>plantuml-wasm</artifactId>
+  <version>1.0.0</version>
+  <packaging>jar</packaging>
+
+  <name>PlantUML Wasm Build</name>
+  <description>Build PlantUML as WebAssembly module</description>
+
+  <properties>
+    <maven.compiler.source>11</maven.compiler.source>
+    <maven.compiler.target>11</maven.compiler.target>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <bytecoder.version>2024-05-10</bytecoder.version>
+  </properties>
+
+  <dependencies>
+    <!-- PlantUML dependency -->
+    <dependency>
+      <groupId>net.sourceforge.plantuml</groupId>
+      <artifactId>plantuml</artifactId>
+      <version>1.2026.0</version>
+    </dependency>
+
+    <!-- Bytecoder for Wasm compilation -->
+    <dependency>
+      <groupId>de.mirkosertic.bytecoder</groupId>
+      <artifactId>bytecoder-core</artifactId>
+      <version>${bytecoder.version}</version>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!-- Bytecoder Maven Plugin -->
+      <plugin>
+        <groupId>de.mirkosertic.bytecoder</groupId>
+        <artifactId>bytecoder-maven-plugin</artifactId>
+        <version>${bytecoder.version}</version>
+        <executions>
+          <execution>
+            <id>compile-to-wasm</id>
+            <phase>package</phase>
+            <goals>
+              <goal>compile</goal>
+            </goals>
+            <configuration>
+              <mainClass>net.sourceforge.plantuml.Run</mainClass>
+              <backend>wasm</backend>
+              <minify>true</minify>
+              <outputDirectory>${project.basedir}/vendor/wasm</outputDirectory>
+              <outputFileName>plantuml.wasm</outputFileName>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- Maven Compiler Plugin -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.11.0</version>
+        <configuration>
+          <source>11</source>
+          <target>11</target>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>
+

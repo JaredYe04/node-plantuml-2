@@ -1,0 +1,54 @@
+@startuml
+!theme blueprint
+title Microservices Architecture
+
+rectangle "API Gateway" as gateway
+
+rectangle "User Service" {
+  [User API]
+  [User DB]
+}
+
+rectangle "Order Service" {
+  [Order API]
+  [Order DB]
+}
+
+rectangle "Product Service" {
+  [Product API]
+  [Product DB]
+}
+
+rectangle "Payment Service" {
+  [Payment API]
+  [Payment DB]
+}
+
+rectangle "Notification Service" {
+  [Notification API]
+  [Message Queue]
+}
+
+cloud "Service Discovery" as discovery
+cloud "Config Server" as config
+
+gateway --> "User Service"
+gateway --> "Order Service"
+gateway --> "Product Service"
+gateway --> "Payment Service"
+
+"Order Service" --> "User Service"
+"Order Service" --> "Product Service"
+"Order Service" --> "Payment Service"
+"Order Service" --> "Notification Service"
+
+"User Service" --> discovery
+"Order Service" --> discovery
+"Product Service" --> discovery
+"Payment Service" --> discovery
+
+"User Service" --> config
+"Order Service" --> config
+
+@enduml
+

@@ -1,0 +1,44 @@
+@startuml
+!theme amiga
+package "Frontend" {
+  [Web UI] as WebUI
+  [Mobile App] as Mobile
+}
+
+package "API Layer" {
+  [API Gateway] as Gateway
+  [Auth API] as AuthAPI
+  [Order API] as OrderAPI
+  [Product API] as ProductAPI
+}
+
+package "Services" {
+  [User Service] as UserService
+  [Order Service] as OrderService
+  [Payment Service] as PaymentService
+  [Notification Service] as NotificationService
+}
+
+package "Data Layer" {
+  database "User DB" as UserDB
+  database "Order DB" as OrderDB
+  database "Product DB" as ProductDB
+}
+
+WebUI --> Gateway
+Mobile --> Gateway
+Gateway --> AuthAPI
+Gateway --> OrderAPI
+Gateway --> ProductAPI
+
+AuthAPI --> UserService
+OrderAPI --> OrderService
+OrderAPI --> PaymentService
+OrderService --> NotificationService
+
+UserService --> UserDB
+OrderService --> OrderDB
+ProductAPI --> ProductDB
+
+@enduml
+

@@ -1,0 +1,66 @@
+@startuml
+!theme cerulean-outline
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+
+abstract class PaymentMethod {
+  {abstract} +pay(amount: Double): Boolean
+  +validate(): Boolean
+}
+
+class CreditCard extends PaymentMethod {
+  -cardNumber: String
+  -expiryDate: Date
+  -cvv: String
+  +pay(amount: Double): Boolean
+}
+
+class PayPal extends PaymentMethod {
+  -email: String
+  -password: String
+  +pay(amount: Double): Boolean
+}
+
+class BankTransfer extends PaymentMethod {
+  -accountNumber: String
+  -bankName: String
+  +pay(amount: Double): Boolean
+}
+
+interface OrderService {
+  +createOrder(): Order
+  +cancelOrder(): Boolean
+  +getOrderStatus(): OrderStatus
+}
+
+class OrderServiceImpl implements OrderService {
+  -orderRepository: OrderRepository
+  +createOrder(): Order
+  +cancelOrder(): Boolean
+  +getOrderStatus(): OrderStatus
+}
+
+class Order {
+  -id: Long
+  -totalAmount: Double
+  -paymentMethod: PaymentMethod
+  -status: OrderStatus
+  +calculateTotal(): Double
+  +applyDiscount(): Void
+}
+
+class OrderRepository {
+  +save(order: Order): Order
+  +findById(id: Long): Order
+  +findAll(): List<Order>
+}
+
+OrderServiceImpl --> OrderRepository : uses
+Order --> PaymentMethod : uses
+CreditCard ..|> PaymentMethod
+PayPal ..|> PaymentMethod
+BankTransfer ..|> PaymentMethod
+OrderServiceImpl ..|> OrderService
+
+@enduml
+

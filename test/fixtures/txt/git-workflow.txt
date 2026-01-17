@@ -1,0 +1,34 @@
+@startuml
+!theme mars
+skinparam linetype ortho
+
+rectangle "Developer" as dev
+rectangle "Feature Branch" as feature
+rectangle "Develop Branch" as develop
+rectangle "Release Branch" as release
+rectangle "Main Branch" as main
+rectangle "Production" as prod
+
+dev --> feature : git checkout -b feature
+feature --> develop : git merge (PR)
+develop --> release : git checkout -b release
+release --> main : git merge (after testing)
+main --> prod : deploy
+
+note right of feature
+  功能开发
+  单元测试
+end note
+
+note right of release
+  集成测试
+  修复bug
+end note
+
+note right of main
+  生产就绪
+  稳定版本
+end note
+
+@enduml
+

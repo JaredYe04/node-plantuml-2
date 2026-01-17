@@ -1,0 +1,43 @@
+@startuml
+!theme reddress-darkred
+
+skinparam defaultFontSize 12
+start
+
+:用户访问网站;
+:浏览商品列表;
+
+if (找到心仪商品?) then (是)
+  :添加到购物车;
+  if (继续购物?) then (是)
+    :继续浏览;
+  else (否)
+    :进入结算页面;
+  endif
+else (否)
+  :搜索商品;
+  if (找到?) then (是)
+    :添加到购物车;
+  else (否)
+    :离开网站;
+    stop
+  endif
+endif
+
+:填写收货信息;
+:选择支付方式;
+:确认订单;
+
+if (支付成功?) then (是)
+  :生成订单;
+  :发送确认邮件;
+  :通知商家;
+  stop
+else (否)
+  :取消订单;
+  :返回购物车;
+  stop
+endif
+
+@enduml
+

@@ -1,0 +1,36 @@
+@startuml
+!theme mars
+participant "User" as user
+participant "Browser" as browser
+participant "Server" as server
+participant "Database" as db
+
+user -> browser: Click Login
+activate browser
+browser -> server: POST /login
+activate server
+server -> db: Query User
+activate db
+db --> server: User Data
+deactivate db
+server -> server: Validate
+server --> browser: JWT Token
+deactivate server
+browser --> user: Show Dashboard
+deactivate browser
+
+user -> browser: Request Data
+activate browser
+browser -> server: GET /api/data
+activate server
+server -> db: SELECT *
+activate db
+db --> server: Result Set
+deactivate db
+server --> browser: JSON Response
+deactivate server
+browser --> user: Display Data
+deactivate browser
+
+@enduml
+

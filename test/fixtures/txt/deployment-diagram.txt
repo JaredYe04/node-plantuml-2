@@ -1,0 +1,44 @@
+@startuml
+!theme blueprint
+node "Load Balancer" {
+  component [Nginx]
+}
+
+node "Web Servers" {
+  component [Node.js App 1]
+  component [Node.js App 2]
+  component [Node.js App 3]
+}
+
+node "Application Servers" {
+  component [API Server 1]
+  component [API Server 2]
+}
+
+node "Database Cluster" {
+  database [PostgreSQL Master]
+  database [PostgreSQL Slave 1]
+  database [PostgreSQL Slave 2]
+}
+
+node "Cache Layer" {
+  component [Redis Cluster]
+}
+
+node "Message Queue" {
+  component [RabbitMQ]
+}
+
+node "File Storage" {
+  component [MinIO]
+}
+
+[Load Balancer] --> [Web Servers]
+[Web Servers] --> [Application Servers]
+[Application Servers] --> [Database Cluster]
+[Application Servers] --> [Cache Layer]
+[Application Servers] --> [Message Queue]
+[Application Servers] --> [File Storage]
+
+@enduml
+

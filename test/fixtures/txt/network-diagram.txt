@@ -1,0 +1,39 @@
+@startuml
+!theme sketchy-outline
+skinparam linetype ortho
+
+rectangle "Internet" as internet
+rectangle "DMZ" as dmz {
+  [Web Server 1]
+  [Web Server 2]
+  [Load Balancer]
+}
+
+rectangle "Internal Network" as internal {
+  rectangle "App Tier" as app {
+    [App Server 1]
+    [App Server 2]
+  }
+  
+  rectangle "Data Tier" as data {
+    [DB Primary]
+    [DB Replica]
+  }
+  
+  rectangle "Cache" as cache {
+    [Redis 1]
+    [Redis 2]
+  }
+}
+
+internet --> dmz
+dmz --> internal
+[Load Balancer] --> [Web Server 1]
+[Load Balancer] --> [Web Server 2]
+[Web Server 1] --> app
+[Web Server 2] --> app
+app --> data
+app --> cache
+
+@enduml
+

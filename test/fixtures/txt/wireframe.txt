@@ -1,0 +1,37 @@
+@startuml
+!theme sketchy
+
+skinparam defaultFontSize 12
+skinparam handwritten true
+
+rectangle "网站首页" {
+  rectangle "顶部导航栏" {
+    [Logo]
+    [首页]
+    [产品]
+    [关于]
+    [登录]
+  }
+  
+  rectangle "轮播图区域" {
+    [Banner 1]
+    [Banner 2]
+    [Banner 3]
+  }
+  
+  rectangle "产品展示区" {
+    [产品卡片 1]
+    [产品卡片 2]
+    [产品卡片 3]
+    [产品卡片 4]
+  }
+  
+  rectangle "底部信息" {
+    [联系方式]
+    [友情链接]
+    [版权信息]
+  }
+}
+
+@enduml
+

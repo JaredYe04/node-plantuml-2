@@ -1,0 +1,22 @@
+@startgantt
+!theme vibrant
+
+skinparam defaultFontSize 12
+project starts 2024-01-01
+
+[需求分析] lasts 10 days
+[系统设计] lasts 15 days
+[前端开发] lasts 30 days
+[后端开发] lasts 35 days
+[测试阶段] lasts 20 days
+[部署上线] lasts 5 days
+
+[系统设计] starts after [需求分析]'s end
+[前端开发] starts after [系统设计]'s end
+[后端开发] starts after [系统设计]'s end
+[测试阶段] starts after [前端开发]'s end
+[测试阶段] starts after [后端开发]'s end
+[部署上线] starts after [测试阶段]'s end
+
+@enduml
+

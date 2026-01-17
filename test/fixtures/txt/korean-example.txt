@@ -1,0 +1,33 @@
+@startuml
+!theme aws-orange
+
+skinparam defaultFontSize 12
+title 한국어 예제 / Korean Example
+
+class 사용자 {
+  -이름: String
+  -이메일: String
+  +로그인()
+  +로그아웃()
+}
+
+class 주문 {
+  -주문번호: String
+  -금액: Double
+  -상태: String
+  +생성()
+  +결제()
+}
+
+class 상품 {
+  -상품명: String
+  -가격: Double
+  -재고: Integer
+  +재고확인()
+}
+
+사용자 "1" --> "0..*" 주문 : 생성
+주문 "1" --> "1..*" 상품 : 포함
+
+@enduml
+

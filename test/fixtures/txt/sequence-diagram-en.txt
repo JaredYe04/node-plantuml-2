@@ -1,0 +1,33 @@
+@startuml
+!theme cerulean-outline
+
+actor User
+participant "Web Browser" as Browser
+participant "API Gateway" as Gateway
+participant "Auth Service" as Auth
+participant "Order Service" as Order
+database "Database" as DB
+
+User -> Browser: Login Request
+Browser -> Gateway: POST /api/login
+Gateway -> Auth: Authenticate User
+Auth -> DB: Query User Credentials
+DB --> Auth: User Data
+Auth -> Auth: Validate Password
+Auth --> Gateway: JWT Token
+Gateway --> Browser: Response (Token)
+Browser --> User: Display Dashboard
+
+User -> Browser: Create Order
+Browser -> Gateway: POST /api/orders
+Gateway -> Auth: Validate Token
+Auth --> Gateway: Token Valid
+Gateway -> Order: Create Order Request
+Order -> DB: Save Order
+DB --> Order: Order Created
+Order --> Gateway: Order Response
+Gateway --> Browser: Success
+Browser --> User: Order Confirmation
+
+@enduml
+

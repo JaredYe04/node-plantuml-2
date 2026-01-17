@@ -1,0 +1,43 @@
+@startuml
+!theme plain
+package "com.example.frontend" {
+  class [React Components]
+  class [Redux Store]
+  class [API Client]
+}
+
+package "com.example.backend" {
+  package "controller" {
+    class [UserController]
+    class [OrderController]
+  }
+  
+  package "service" {
+    class [UserService]
+    class [OrderService]
+  }
+  
+  package "repository" {
+    class [UserRepository]
+    class [OrderRepository]
+  }
+}
+
+package "com.example.shared" {
+  class [DTO]
+  class [Constants]
+  class [Utils]
+}
+
+[React Components] --> [API Client]
+[API Client] --> [UserController]
+[API Client] --> [OrderController]
+[UserController] --> [UserService]
+[OrderController] --> [OrderService]
+[UserService] --> [UserRepository]
+[OrderService] --> [OrderRepository]
+[UserService] --> [DTO]
+[OrderService] --> [DTO]
+
+@enduml
+
