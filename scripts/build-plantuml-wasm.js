@@ -23,8 +23,10 @@ var WASM_OUTPUT = path.join(WASM_DIR, 'plantuml.wasm')
 var BYTECODER_GITHUB_API = 'https://api.github.com/repos/mirkosertic/Bytecoder/releases/latest'
 var BYTECODER_JAR = path.join(__dirname, '../vendor/bytecoder-cli.jar')
 // Bytecoder CLI dependencies
+var BYTECODER_VERSION = '2023-05-19' // Bytecoder version
 var PICOCLI_VERSION = '4.7.5' // Compatible with Bytecoder 2023-05-19
 var PICOCLI_JAR = path.join(__dirname, '../vendor/picocli-' + PICOCLI_VERSION + '.jar')
+var BYTECODER_CORE_JAR = path.join(__dirname, '../vendor/bytecoder-core-' + BYTECODER_VERSION + '.jar')
 var POM_FILE = path.join(__dirname, '../pom.xml')
 
 var BUILD_METHOD = process.env.BUILD_METHOD || 'maven' // 'maven' (preferred), 'bytecoder', or 'teavm'
@@ -169,6 +171,16 @@ function ensureBytecoderDependencies (callback) {
     })
   }
 
+  // Check if bytecoder-core exists (required by bytecoder-cli)
+  if (!fs.existsSync(BYTECODER_CORE_JAR)) {
+    dependencies.push({
+      groupId: 'de.mirkosertic.bytecoder',
+      artifactId: 'bytecoder-core',
+      version: BYTECODER_VERSION,
+      outputPath: BYTECODER_CORE_JAR
+    })
+  }
+
   if (dependencies.length === 0) {
     callback(null)
     return
@@ -256,11 +268,18 @@ function buildWithBytecoder (callback) {
 
   // Method 2: Try with -cp (classpath) including dependencies
   // Build classpath with all required JARs
-  var classpathParts = [BYTECODER_JAR]
+  var classpathParts = []
+  
+  // Bytecoder core must be first (contains core classes used by CLI)
+  if (fs.existsSync(BYTECODER_CORE_JAR)) {
+    classpathParts.push(BYTECODER_CORE_JAR)
+  }
+  // Then CLI and other dependencies
+  classpathParts.push(BYTECODER_JAR)
   if (fs.existsSync(PICOCLI_JAR)) {
     classpathParts.push(PICOCLI_JAR)
   }
-  classpathParts.push(PLANTUML_JAR)
+  // PlantUML JAR is passed as -classpath parameter separately
   var classpath = classpathParts.join(path.delimiter)
 
   var args2 = [
