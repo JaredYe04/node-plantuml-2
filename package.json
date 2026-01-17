@@ -46,8 +46,8 @@
     "scripts/get-vizjs.js"
   ],
   "scripts": {
-    "prepublish": "npm run build:wasm:publish",
-    "build:wasm:publish": "node scripts/get-plantuml-jar.js --latest && node scripts/build-wasm-maven.js",
+    "prepublish": "node scripts/get-plantuml-jar.js --latest || echo 'JAR download failed, continuing...'",
+    "build:wasm:publish": "node scripts/get-plantuml-jar.js --latest && node scripts/build-plantuml-wasm.js",
     "postinstall": "node scripts/get-vizjs.js",
     "test": "standard && node test/fixtures/prepare.js && mocha",
     "test:batch": "node test/batch-convert-test.js",

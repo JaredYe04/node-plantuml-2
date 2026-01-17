@@ -56,9 +56,28 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         run: |
           echo "🔄 Fetching latest changes from remote..."
-          git fetch origin main
-          git checkout main
-          git pull origin main --rebase || git pull origin main
+          # Try to detect default branch, fallback to main/master
+          DEFAULT_BRANCH=$(git remote show origin | grep "HEAD branch" | cut -d" " -f5 || echo "")
+          if [ -z "$DEFAULT_BRANCH" ]; then
+            # Try common branch names
+            for branch in main master; do
+              if git ls-remote --heads origin $branch | grep -q .; then
+                DEFAULT_BRANCH=$branch
+                break
+              fi
+            done
+          fi
+          if [ -z "$DEFAULT_BRANCH" ]; then
+            echo "⚠️  Could not detect default branch, using 'main' as fallback"
+            DEFAULT_BRANCH="main"
+          fi
+          echo "🔄 Using branch: $DEFAULT_BRANCH"
+          git fetch origin $DEFAULT_BRANCH || true
+          CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "")
+          if [ -z "$CURRENT_BRANCH" ] || [ "$CURRENT_BRANCH" != "$DEFAULT_BRANCH" ]; then
+            git checkout $DEFAULT_BRANCH || true
+          fi
+          git pull origin $DEFAULT_BRANCH --rebase || git pull origin $DEFAULT_BRANCH || true
 
       - name: Install dependencies
         run: |
@@ -202,10 +221,23 @@ jobs:
           fi
 
           echo "🔄 Pulling latest changes from remote..."
-          git fetch origin main
-          git pull origin main --rebase || git pull origin main --no-edit || {
-            echo "❌ Failed to sync with remote"
-            exit 1
+          # Try to detect default branch
+          DEFAULT_BRANCH=$(git remote show origin | grep "HEAD branch" | cut -d" " -f5 || echo "")
+          if [ -z "$DEFAULT_BRANCH" ]; then
+            for branch in main master; do
+              if git ls-remote --heads origin $branch | grep -q .; then
+                DEFAULT_BRANCH=$branch
+                break
+              fi
+            done
+          fi
+          if [ -z "$DEFAULT_BRANCH" ]; then
+            DEFAULT_BRANCH="main"
+          fi
+          echo "🔄 Using branch: $DEFAULT_BRANCH"
+          git fetch origin $DEFAULT_BRANCH || true
+          git pull origin $DEFAULT_BRANCH --rebase || git pull origin $DEFAULT_BRANCH --no-edit || {
+            echo "⚠️  Warning: Failed to sync with remote, but continuing..."
           }
 
           if git rev-parse "v${{ env.VERSION }}" >/dev/null 2>&1; then
@@ -215,8 +247,22 @@ jobs:
           fi
 
           echo "📤 Pushing changes to remote..."
-          git push origin HEAD:main || {
-            echo "❌ Failed to push to main branch"
+          # Try to detect default branch
+          DEFAULT_BRANCH=$(git remote show origin | grep "HEAD branch" | cut -d" " -f5 || echo "")
+          if [ -z "$DEFAULT_BRANCH" ]; then
+            for branch in main master; do
+              if git ls-remote --heads origin $branch | grep -q .; then
+                DEFAULT_BRANCH=$branch
+                break
+              fi
+            done
+          fi
+          if [ -z "$DEFAULT_BRANCH" ]; then
+            DEFAULT_BRANCH="main"
+          fi
+          echo "🔄 Pushing to branch: $DEFAULT_BRANCH"
+          git push origin HEAD:$DEFAULT_BRANCH || {
+            echo "❌ Failed to push to branch: $DEFAULT_BRANCH"
             exit 1
           }
 
