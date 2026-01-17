@@ -22,8 +22,12 @@ var WASM_OUTPUT = path.join(WASM_DIR, 'plantuml.wasm')
 // Bytecoder CLI - try to get latest from GitHub API
 var BYTECODER_GITHUB_API = 'https://api.github.com/repos/mirkosertic/Bytecoder/releases/latest'
 var BYTECODER_JAR = path.join(__dirname, '../vendor/bytecoder-cli.jar')
+// Bytecoder CLI dependencies
+var PICOCLI_VERSION = '4.7.5' // Compatible with Bytecoder 2023-05-19
+var PICOCLI_JAR = path.join(__dirname, '../vendor/picocli-' + PICOCLI_VERSION + '.jar')
+var POM_FILE = path.join(__dirname, '../pom.xml')
 
-var BUILD_METHOD = process.env.BUILD_METHOD || 'bytecoder' // 'bytecoder' or 'teavm'
+var BUILD_METHOD = process.env.BUILD_METHOD || 'maven' // 'maven' (preferred), 'bytecoder', or 'teavm'
 
 /**
  * Get latest Bytecoder CLI download URL
@@ -127,6 +131,69 @@ function verifyUrl (url, versions, index, callback) {
 }
 
 /**
+ * Download a JAR from Maven Central
+ */
+function downloadMavenJar (groupId, artifactId, version, outputPath, callback) {
+  var download = require('./download')
+  // Convert groupId to path (e.g., "de.mirkosertic.bytecoder" -> "de/mirkosertic/bytecoder")
+  var groupPath = groupId.replace(/\./g, '/')
+  var mavenUrl = 'https://repo1.maven.org/maven2/' + groupPath + '/' + artifactId + '/' + version + '/' + artifactId + '-' + version + '.jar'
+
+  console.log('Downloading ' + artifactId + ' from Maven Central...')
+  console.log('URL: ' + mavenUrl)
+
+  download(mavenUrl, outputPath, false, function (downloadErr) {
+    if (downloadErr) {
+      callback(downloadErr)
+    } else {
+      console.log('✓ ' + artifactId + ' downloaded: ' + outputPath)
+      callback(null)
+    }
+  })
+}
+
+/**
+ * Download Bytecoder CLI dependencies (picocli, etc.)
+ */
+function ensureBytecoderDependencies (callback) {
+  var download = require('./download')
+  var dependencies = []
+
+  // Check if picocli exists
+  if (!fs.existsSync(PICOCLI_JAR)) {
+    dependencies.push({
+      groupId: 'info.picocli',
+      artifactId: 'picocli',
+      version: PICOCLI_VERSION,
+      outputPath: PICOCLI_JAR
+    })
+  }
+
+  if (dependencies.length === 0) {
+    callback(null)
+    return
+  }
+
+  console.log('Downloading Bytecoder CLI dependencies...')
+  var remaining = dependencies.length
+  var hasError = false
+
+  dependencies.forEach(function (dep) {
+    downloadMavenJar(dep.groupId, dep.artifactId, dep.version, dep.outputPath, function (err) {
+      if (err && !hasError) {
+        hasError = true
+        callback(err)
+        return
+      }
+      remaining--
+      if (remaining === 0 && !hasError) {
+        callback(null)
+      }
+    })
+  })
+}
+
+/**
  * Download Bytecoder CLI if not exists
  */
 function ensureBytecoder (callback) {
@@ -187,9 +254,17 @@ function buildWithBytecoder (callback) {
     '-minify', 'true'
   ]
 
-  // Method 2: Try with -cp (classpath) if JAR is not executable
+  // Method 2: Try with -cp (classpath) including dependencies
+  // Build classpath with all required JARs
+  var classpathParts = [BYTECODER_JAR]
+  if (fs.existsSync(PICOCLI_JAR)) {
+    classpathParts.push(PICOCLI_JAR)
+  }
+  classpathParts.push(PLANTUML_JAR)
+  var classpath = classpathParts.join(path.delimiter)
+
   var args2 = [
-    '-cp', BYTECODER_JAR + path.delimiter + PLANTUML_JAR,
+    '-cp', classpath,
     'de.mirkosertic.bytecoder.cli.BytecoderCLI',
     '-classpath', PLANTUML_JAR,
     '-mainclass', 'net.sourceforge.plantuml.Run',
@@ -273,6 +348,107 @@ function buildWithBytecoder (callback) {
 }
 
 /**
+ * Check if Maven is available
+ */
+function checkMaven (callback) {
+  childProcess.exec('mvn -version', function (err, stdout, stderr) {
+    if (err) {
+      callback(new Error('Maven not found'))
+      return
+    }
+    console.log('✓ Maven found')
+    console.log(stdout.split('\n')[0]) // Print Maven version
+    callback(null)
+  })
+}
+
+/**
+ * Build Wasm using Maven (preferred method - handles all dependencies automatically)
+ */
+function buildWithMaven (callback) {
+  console.log('Building PlantUML Wasm module with Maven...')
+  console.log('This may take several minutes on first run (downloading dependencies)...')
+  console.log('')
+
+  if (!fs.existsSync(POM_FILE)) {
+    callback(new Error('pom.xml not found: ' + POM_FILE))
+    return
+  }
+
+  if (!fs.existsSync(PLANTUML_JAR)) {
+    callback(new Error('PlantUML JAR not found: ' + PLANTUML_JAR + '\nPlease run: node scripts/get-plantuml-jar.js'))
+    return
+  }
+
+  // Create output directory
+  if (!fs.existsSync(WASM_DIR)) {
+    fs.mkdirSync(WASM_DIR, { recursive: true })
+  }
+
+  // Run Maven package
+  var args = ['clean', 'package', '-DskipTests']
+
+  console.log('Running: mvn ' + args.join(' '))
+  console.log('')
+
+  var child = childProcess.spawn('mvn', args, {
+    stdio: 'inherit',
+    cwd: path.join(__dirname, '..'),
+    shell: process.platform === 'win32'
+  })
+
+  child.on('close', function (code) {
+    if (code === 0) {
+      // Check if Wasm file was generated
+      // Bytecoder may output to different locations, check common ones
+      var possibleLocations = [
+        path.join(__dirname, '../vendor/wasm/plantuml.wasm'),
+        path.join(__dirname, '../target/plantuml.wasm'),
+        path.join(__dirname, '../target/wasm/plantuml.wasm')
+      ]
+
+      var foundWasm = null
+      for (var i = 0; i < possibleLocations.length; i++) {
+        if (fs.existsSync(possibleLocations[i])) {
+          foundWasm = possibleLocations[i]
+          break
+        }
+      }
+
+      if (foundWasm) {
+        // Copy to final location
+        if (fs.existsSync(WASM_OUTPUT)) {
+          fs.unlinkSync(WASM_OUTPUT)
+        }
+        if (foundWasm !== WASM_OUTPUT) {
+          fs.copyFileSync(foundWasm, WASM_OUTPUT)
+        }
+        console.log('')
+        console.log('✓ Wasm module built successfully: ' + WASM_OUTPUT)
+        callback(null)
+      } else {
+        console.error('')
+        console.error('✗ Wasm file not found in expected locations')
+        console.error('Checked:')
+        possibleLocations.forEach(function (loc) {
+          console.error('  - ' + loc)
+        })
+        callback(new Error('Build completed but Wasm file not found'))
+      }
+    } else {
+      console.error('')
+      console.error('✗ Maven build failed with exit code: ' + code)
+      callback(new Error('Maven build failed with exit code: ' + code))
+    }
+  })
+
+  child.on('error', function (err) {
+    console.error('✗ Failed to spawn Maven process:', err.message)
+    callback(err)
+  })
+}
+
+/**
  * Build Wasm using TeaVM (Maven-based)
  */
 function buildWithTeaVM (callback) {
@@ -286,25 +462,46 @@ function buildWithTeaVM (callback) {
   // 3. Run Maven build
   // 4. Extract generated Wasm file
 
-  callback(new Error('TeaVM build not implemented yet. Use --method bytecoder'))
+  callback(new Error('TeaVM build not implemented yet. Use --method maven or bytecoder'))
 }
 
 /**
  * Main build function
  */
 function build (method, callback) {
-  if (method === 'bytecoder') {
+  if (method === 'maven') {
+    // Try Maven first (preferred - handles all dependencies automatically)
+    checkMaven(function (err) {
+      if (err) {
+        console.warn('⚠️  Maven not found, falling back to Bytecoder CLI...')
+        console.warn('   Install Maven for better dependency handling: https://maven.apache.org/install.html')
+        console.warn('')
+        // Fall back to bytecoder
+        method = 'bytecoder'
+        build(method, callback)
+        return
+      }
+      buildWithMaven(callback)
+    })
+  } else if (method === 'bytecoder') {
+    // Download Bytecoder CLI and its dependencies
     ensureBytecoder(function (err) {
       if (err) {
         callback(err)
         return
       }
-      buildWithBytecoder(callback)
+      ensureBytecoderDependencies(function (err2) {
+        if (err2) {
+          callback(err2)
+          return
+        }
+        buildWithBytecoder(callback)
+      })
     })
   } else if (method === 'teavm') {
     buildWithTeaVM(callback)
   } else {
-    callback(new Error('Unknown build method: ' + method))
+    callback(new Error('Unknown build method: ' + method + '. Use: maven, bytecoder, or teavm'))
   }
 }
 
@@ -322,11 +519,16 @@ if (require.main === module) {
     console.log('Usage: node scripts/build-plantuml-wasm.js [options]')
     console.log('')
     console.log('Options:')
-    console.log('  --method <method>  Build method: bytecoder (default) or teavm')
+    console.log('  --method <method>  Build method: maven (default, preferred), bytecoder, or teavm')
     console.log('  -h, --help         Show this help message')
     console.log('')
+    console.log('Build methods:')
+    console.log('  maven              Use Maven (recommended - handles all dependencies automatically)')
+    console.log('  bytecoder          Use Bytecoder CLI (requires downloading dependencies manually)')
+    console.log('  teavm              Use TeaVM (not implemented yet)')
+    console.log('')
     console.log('Environment variables:')
-    console.log('  BUILD_METHOD       Build method to use (bytecoder or teavm)')
+    console.log('  BUILD_METHOD       Build method to use (maven, bytecoder, or teavm)')
     process.exit(0)
   }
 
@@ -338,4 +540,4 @@ if (require.main === module) {
   })
 }
 
-module.exports = { build, ensureBytecoder, buildWithBytecoder, buildWithTeaVM }
+module.exports = { build, ensureBytecoder, ensureBytecoderDependencies, buildWithBytecoder, buildWithMaven, buildWithTeaVM, checkMaven }
