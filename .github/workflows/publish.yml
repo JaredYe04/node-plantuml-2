@@ -179,15 +179,35 @@ jobs:
           echo "📥 Downloading latest PlantUML JAR..."
           npm run build:all:jar-only || echo "JAR download failed, but continuing..."
 
-      - name: Build Wasm module (optional)
-        continue-on-error: true
+      - name: Build Wasm module (required for pure Node.js)
+        continue-on-error: false
         run: |
           echo "🔨 Building Wasm module (this may take several minutes)..."
-          echo "⚠️  Note: Wasm build is experimental and may fail"
-          npm run build:wasm:bytecoder || echo "Wasm build failed, will use Java executor as fallback"
+          echo "📦 This is required for pure Node.js operation without Java dependency"
+          npm run build:wasm:bytecoder
+          if [ ! -f vendor/wasm/plantuml.wasm ]; then
+            echo "❌ Error: Wasm module not found after build"
+            echo "💡 The pure Node.js version requires a valid WASM module"
+            exit 1
+          fi
+          echo "✅ Wasm module built successfully: vendor/wasm/plantuml.wasm"
 
-      - name: Build
-        run: npm run build || echo "No build script found, skipping"
+      - name: Verify WASM module
+        run: |
+          if [ -f vendor/wasm/plantuml.wasm ]; then
+            WASM_SIZE=$(stat -f%z vendor/wasm/plantuml.wasm 2>/dev/null || stat -c%s vendor/wasm/plantuml.wasm 2>/dev/null || echo "0")
+            if [ "$WASM_SIZE" -gt 1000 ]; then
+              echo "✅ WASM module verified: $(du -h vendor/wasm/plantuml.wasm | cut -f1)"
+            else
+              echo "⚠️  Warning: WASM module seems too small ($WASM_SIZE bytes)"
+            fi
+          else
+            echo "❌ Error: WASM module not found"
+            exit 1
+          fi
+
+      # Note: We skip 'npm run build' which builds Java Nailgun server
+      # This is intentional for pure Node.js version - WASM is already built above
 
       - name: Verify NPM authentication
         run: |

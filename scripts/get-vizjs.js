@@ -26,26 +26,48 @@ plantuml.testdot(function (isOk) {
   if (isOk) {
     console.info('graphviz was found on the system. Skipping download of vizjs.')
   } else {
-    console.info('graphviz was not found on the system. Downloading vizjs instead. See http://plantuml.com/vizjs. This may take a few minutes.')
+    // Check if vizjs.jar already exists (e.g., from previous installation or bundled in package)
+    if (fs.existsSync(VIZJS_JAR)) {
+      console.info('vizjs.jar already exists. Skipping download.')
+    } else {
+      console.info('graphviz was not found on the system. Downloading vizjs instead. See http://plantuml.com/vizjs. This may take a few minutes.')
 
-    // download additional libraries for working without dot installed.
-    download(VIZJS_URL, VIZJS_JAR, false, function (err) {
-      if (!err) {
-        // also install the V8 engine just in case the currently installed Java does not have Nashorn
-        switch (process.platform) {
-          case 'win32':
-            download(J2V8_WIN_URL, J2V8_WIN_JAR, false)
-            break
-          case 'linux':
-            download(J2V8_LINUX_URL, J2V8_LINUX_JAR, false)
-            break
-          case 'darwin':
-            download(J2V8_MAC_URL, J2V8_MAC_JAR, false)
-            break
-          default:
-            console.error('Unsupported operating system for V8 jars.')
+      // download additional libraries for working without dot installed.
+      download(VIZJS_URL, VIZJS_JAR, false, function (err) {
+        if (err) {
+          console.warn('Warning: Failed to download vizjs.jar:', err)
+          console.warn('The package can still be used if graphviz is installed on the system, or if vizjs.jar is provided manually.')
+          console.warn('You can retry the download later or install graphviz to avoid this dependency.')
+          // Don't exit with error code - this is a non-critical dependency
+        } else {
+          // also install the V8 engine just in case the currently installed Java does not have Nashorn
+          switch (process.platform) {
+            case 'win32':
+              download(J2V8_WIN_URL, J2V8_WIN_JAR, false, function (err) {
+                if (err) {
+                  console.warn('Warning: Failed to download j2v8 Windows jar:', err)
+                }
+              })
+              break
+            case 'linux':
+              download(J2V8_LINUX_URL, J2V8_LINUX_JAR, false, function (err) {
+                if (err) {
+                  console.warn('Warning: Failed to download j2v8 Linux jar:', err)
+                }
+              })
+              break
+            case 'darwin':
+              download(J2V8_MAC_URL, J2V8_MAC_JAR, false, function (err) {
+                if (err) {
+                  console.warn('Warning: Failed to download j2v8 macOS jar:', err)
+                }
+              })
+              break
+            default:
+              console.error('Unsupported operating system for V8 jars.')
+          }
         }
-      }
-    })
+      })
+    }
   }
 })
