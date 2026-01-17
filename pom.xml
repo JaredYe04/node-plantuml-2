@@ -34,15 +34,20 @@
       <artifactId>bytecoder-core</artifactId>
       <version>${bytecoder.version}</version>
     </dependency>
+    <dependency>
+      <groupId>de.mirkosertic.bytecoder</groupId>
+      <artifactId>bytecoder.api</artifactId>
+      <version>${bytecoder.version}</version>
+    </dependency>
   </dependencies>
 
   <build>
     <plugins>
-      <!-- Bytecoder Maven Plugin -->
+      <!-- TeaVM Maven Plugin (alternative to Bytecoder) -->
       <plugin>
-        <groupId>de.mirkosertic.bytecoder</groupId>
-        <artifactId>bytecoder-maven-plugin</artifactId>
-        <version>${bytecoder.version}</version>
+        <groupId>org.teavm</groupId>
+        <artifactId>teavm-maven-plugin</artifactId>
+        <version>0.10.0</version>
         <executions>
           <execution>
             <id>compile-to-wasm</id>
@@ -52,10 +57,11 @@
             </goals>
             <configuration>
               <mainClass>net.sourceforge.plantuml.Run</mainClass>
-              <backend>wasm</backend>
-              <minify>true</minify>
+              <targetType>WASM</targetType>
+              <minifying>true</minifying>
               <outputDirectory>${project.basedir}/vendor/wasm</outputDirectory>
-              <outputFileName>plantuml.wasm</outputFileName>
+              <wasmVersion>0x1</wasmVersion>
+              <optimizationLevel>FULL</optimizationLevel>
             </configuration>
           </execution>
         </executions>

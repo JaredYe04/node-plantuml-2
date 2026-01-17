@@ -54,8 +54,9 @@
     "test:batch:svg": "node test/batch-convert-test.js --svg",
     "test:batch:png": "node test/batch-convert-test.js --png",
     "build": "node nail/build.js",
-    "build:wasm": "node scripts/build-plantuml-wasm.js",
-    "build:wasm:bytecoder": "node scripts/build-plantuml-wasm.js",
+    "build:wasm": "node scripts/build-plantuml-wasm.js --method cheerpj",
+    "build:wasm:cheerpj": "node scripts/build-plantuml-wasm.js --method cheerpj",
+    "build:wasm:bytecoder": "node scripts/build-plantuml-wasm.js --method bytecoder",
     "build:all": "node scripts/build-all.js",
     "build:all:jar-only": "node scripts/build-all.js --skip-wasm",
     "build:all:wasm-only": "node scripts/build-all.js --skip-jar"

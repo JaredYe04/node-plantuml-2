@@ -181,23 +181,35 @@ jobs:
 
       - name: Build Wasm module (required for pure Node.js)
         continue-on-error: false
-        env:
-          BUILD_METHOD: bytecoder
         run: |
-          echo "🔨 Building Wasm module using Bytecoder CLI (this may take several minutes)..."
+          echo "🔨 Building Wasm module using CheerpJ (official PlantUML WASM solution)..."
           echo "📦 This is required for pure Node.js operation without Java dependency"
-          echo "💡 Using Bytecoder CLI method (Maven plugin is not available in Central)"
-          npm run build:wasm:bytecoder
-          if [ ! -f vendor/wasm/plantuml.wasm ]; then
+          echo "💡 Using CheerpJ method - pure Node.js, no Maven required"
+          BUILD_METHOD=cheerpj npm run build:wasm
+          # Check for CheerpJ files (plantuml-core.js or plantuml-core.wasm)
+          if [ ! -f vendor/wasm/plantuml-core.js ] && [ ! -f vendor/wasm/plantuml.wasm ]; then
             echo "❌ Error: Wasm module not found after build"
             echo "💡 The pure Node.js version requires a valid WASM module"
+            echo "   Expected: vendor/wasm/plantuml-core.js or vendor/wasm/plantuml.wasm"
             exit 1
           fi
-          echo "✅ Wasm module built successfully: vendor/wasm/plantuml.wasm"
+          if [ -f vendor/wasm/plantuml-core.js ]; then
+            echo "✅ CheerpJ WASM module built successfully: vendor/wasm/plantuml-core.js"
+          else
+            echo "✅ Wasm module built successfully: vendor/wasm/plantuml.wasm"
+          fi
 
       - name: Verify WASM module
         run: |
-          if [ -f vendor/wasm/plantuml.wasm ]; then
+          # Check for CheerpJ files first, then fallback to standard WASM
+          if [ -f vendor/wasm/plantuml-core.js ]; then
+            WASM_SIZE=$(stat -f%z vendor/wasm/plantuml-core.js 2>/dev/null || stat -c%s vendor/wasm/plantuml-core.js 2>/dev/null || echo "0")
+            if [ "$WASM_SIZE" -gt 1000 ]; then
+              echo "✅ CheerpJ WASM module verified: $(du -h vendor/wasm/plantuml-core.js | cut -f1)"
+            else
+              echo "⚠️  Warning: CheerpJ module seems too small ($WASM_SIZE bytes)"
+            fi
+          elif [ -f vendor/wasm/plantuml.wasm ]; then
             WASM_SIZE=$(stat -f%z vendor/wasm/plantuml.wasm 2>/dev/null || stat -c%s vendor/wasm/plantuml.wasm 2>/dev/null || echo "0")
             if [ "$WASM_SIZE" -gt 1000 ]; then
               echo "✅ WASM module verified: $(du -h vendor/wasm/plantuml.wasm | cut -f1)"
