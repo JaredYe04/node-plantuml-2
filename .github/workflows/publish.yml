@@ -339,6 +339,50 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      - name: Check npm organization exists
+        shell: bash
+        run: |
+          echo "🔍 Checking if npm organization @node-plantuml-2 exists..."
+          
+          # Try to check if the organization scope exists by attempting to view a non-existent package
+          # If scope doesn't exist, npm will return "Scope not found"
+          ERROR_OUTPUT=$(npm view @node-plantuml-2/jre-linux-x64@999.0.0 2>&1 || true)
+          
+          if echo "$ERROR_OUTPUT" | grep -q "Scope not found"; then
+            echo ""
+            echo "❌ ERROR: npm organization @node-plantuml-2 does not exist!"
+            echo ""
+            echo "📝 You must create the npm organization before publishing runtime packages."
+            echo ""
+            echo "   Quick setup (choose one method):"
+            echo ""
+            echo "   Method 1 (Web UI - Recommended):"
+            echo "   1. Go to: https://www.npmjs.com/org/create"
+            echo "   2. Create organization: node-plantuml-2"
+            echo "   3. Choose 'Public' (free for public packages)"
+            echo "   4. Make sure your npm account is the owner"
+            echo ""
+            echo "   Method 2 (Command line):"
+            echo "   npm org create node-plantuml-2"
+            echo ""
+            echo "   After creating:"
+            echo "   - Ensure your NPM_TOKEN has access to publish to the organization"
+            echo "   - You may need to regenerate your NPM_TOKEN with organization permissions"
+            echo ""
+            echo "   For detailed instructions, see: docs/NPM_ORGANIZATION_SETUP.md"
+            echo ""
+            exit 1
+          elif echo "$ERROR_OUTPUT" | grep -q "not in this registry\|404"; then
+            # Package doesn't exist, but scope exists - this is OK
+            echo "✅ npm organization @node-plantuml-2 exists (package not found is expected)"
+          else
+            echo "⚠️  Could not definitively verify organization, but continuing..."
+            echo "   If publish fails with 'Scope not found', please check docs/NPM_ORGANIZATION_SETUP.md"
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        continue-on-error: false
+
       - name: Check if runtime package version exists
         id: check-version
         shell: bash
