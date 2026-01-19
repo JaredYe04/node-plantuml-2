@@ -20,8 +20,9 @@ A powerful Node.js module and CLI for running [PlantUML](http://plantuml.sourcef
 
 ## ✨ Key Features
 
+- 🎯 **Zero Java Installation Required** - **Java is automatically bundled!** Just `npm install` and it works - no manual Java setup needed
+- 📦 **Auto-Integrated JRE** - Automatically installs a lightweight JRE (40-60MB) for your platform during `npm install`
 - 🚀 **Optimized Java Execution** - Uses Nailgun for faster Java startup, keeping JVM resident in memory
-- 📦 **Easy Setup** - Just `npm install` and ensure Java is installed
 - 🎨 **Multiple Output Formats** - Support for PNG, SVG, EPS, ASCII, and Unicode text
 - 🌏 **Multi-language Support** - Perfect rendering for Chinese, Japanese, Korean, and other CJK characters with automatic font detection
 - ⚡ **Fast Performance** - Nailgun optimization reduces Java startup overhead
@@ -38,14 +39,18 @@ A powerful Node.js module and CLI for running [PlantUML](http://plantuml.sourcef
 npm install node-plantuml-2
 ```
 
-**That's it!** The package automatically installs a bundled, minimal JRE for your platform. **No Java installation required!** 🎉
+**That's it! 🎉 No Java installation needed!**
 
-The bundled JRE is automatically installed via platform-specific optional dependencies:
-- **Windows x64**: `@node-plantuml-2/jre-win32-x64`
-- **macOS ARM64**: `@node-plantuml-2/jre-darwin-arm64`
-- **Linux x64**: `@node-plantuml-2/jre-linux-x64`
+The package **automatically detects your platform** and installs a lightweight, bundled JRE (40-60MB) during `npm install`. You don't need to install Java separately - it's handled automatically!
 
-Only the JRE matching your platform will be installed, keeping the installation lightweight.
+**How it works:**
+- During `npm install`, the package detects your operating system and architecture
+- Automatically downloads and installs the matching JRE runtime package for your platform:
+  - **Windows x64** → `@node-plantuml-2/jre-win32-x64`
+  - **macOS ARM64** → `@node-plantuml-2/jre-darwin-arm64`
+  - **Linux x64** → `@node-plantuml-2/jre-linux-x64`
+- Only the JRE for your platform is installed (others are skipped automatically)
+- Works out of the box - no configuration needed!
 
 For global CLI installation:
 
@@ -53,32 +58,46 @@ For global CLI installation:
 npm install node-plantuml-2 -g
 ```
 
+**⚠️ Important:** You do NOT need to install Java on your system. The bundled JRE is automatically integrated when you install this npm package.
+
 ### Java Requirements
 
-This library uses Java to run PlantUML. **Java is automatically provided** via bundled JRE packages - no manual installation needed!
+**🎯 Zero Java Installation Required!**
 
-**How it works:**
+This package **automatically bundles a minimal JRE** during installation. You do **NOT** need to install Java on your system!
 
-1. **Bundled JRE** (Primary) - Automatically installed for your platform via `optionalDependencies`
-   - Lightweight minimal JRE built with `jlink`
-   - Only ~40-60MB per platform
-   - Works out of the box, no configuration needed
+**Automatic JRE Integration:**
+
+When you run `npm install node-plantuml-2`, the package:
+1. **Detects your platform** (Windows/macOS/Linux and architecture)
+2. **Automatically downloads** the matching lightweight JRE (40-60MB)
+3. **Integrates it seamlessly** - no manual setup needed
+4. **Works immediately** after installation completes
+
+**Java Resolution Priority:**
+
+The package uses the following priority to find Java:
+
+1. **Bundled JRE** (Primary) ⭐ - Automatically installed during `npm install`
+   - Platform-specific: only your platform's JRE is downloaded
+   - Lightweight: ~40-60MB, built with `jlink` for optimal size
+   - Zero configuration: works out of the box
 
 2. **System Java** (Fallback) - If bundled JRE is unavailable, uses system Java if present
    - Checks `JAVA_HOME` environment variable
    - Checks system PATH for `java` command
 
-3. **Custom Java** (Optional) - Specify custom Java path via `options.javaPath`
+3. **Custom Java** (Optional) - Override with custom Java path:
    ```javascript
    plantuml.generate(code, { javaPath: '/custom/path/to/java' })
    ```
 
-**No manual Java installation required!** The bundled JRE works out of the box on supported platforms:
-- ✅ Windows x64
-- ✅ macOS ARM64 (Apple Silicon)
-- ✅ Linux x64
+**Supported Platforms (with automatic JRE):**
+- ✅ Windows x64 - JRE automatically bundled
+- ✅ macOS ARM64 (Apple Silicon) - JRE automatically bundled
+- ✅ Linux x64 - JRE automatically bundled
 
-If you prefer to use system Java instead, ensure **Java Runtime Environment (JRE) 8+** is installed, and the bundled JRE will be automatically skipped.
+**Summary: Install the npm package, Java is included automatically! No separate Java installation needed.**
 
 ---
 
@@ -514,16 +533,18 @@ Return Stream
 
 ## 📋 System Requirements
 
-- **Node.js 12+**
-- **Java Runtime Environment (JRE) 8+** - **Automatically provided via bundled JRE packages** (no installation needed!)
+- **Node.js 12+** - That's it!
+- ~~**Java Runtime Environment (JRE)**~~ - **NOT REQUIRED!** Automatically bundled during `npm install`
 - **Graphviz** (optional, for advanced diagram types)
 
-**Supported Platforms:**
-- ✅ Windows x64
-- ✅ macOS ARM64 (Apple Silicon)
-- ✅ Linux x64
+**✅ Supported Platforms (with automatic JRE integration):**
+- Windows x64 - JRE automatically installed during `npm install`
+- macOS ARM64 (Apple Silicon) - JRE automatically installed during `npm install`
+- Linux x64 - JRE automatically installed during `npm install`
 
-**Note**: Java is automatically bundled via platform-specific npm packages - **no manual Java installation required!** The bundled minimal JRE is lightweight (~40-60MB) and works out of the box.
+**🎯 Key Point:** You only need Node.js installed. The Java runtime is automatically downloaded and integrated when you install this package. **No manual Java installation or configuration needed!**
+
+The bundled JRE is lightweight (~40-60MB) and specifically built for your platform.
 
 ---
 
@@ -604,9 +625,9 @@ Special thanks to the PlantUML community and all contributors!
 
 ## ✨ 核心特性
 
-- 📦 **无需安装 Java** - 通过特定平台包自动安装捆绑的轻量级 JRE
+- 🎯 **零 Java 安装要求** - **Java 自动集成！** 只需 `npm install` 即可使用 - 无需手动安装 Java
+- 📦 **自动集成 JRE** - 安装 npm 包时自动为您的平台下载并安装轻量级 JRE（40-60MB）
 - 🚀 **优化的 Java 执行** - 使用 Nailgun 加速 Java 启动，保持 JVM 常驻内存
-- 🎯 **易于安装** - 只需 `npm install` - 无需手动配置 Java！
 - 🎨 **多种输出格式** - 支持 PNG、SVG、EPS、ASCII 和 Unicode 文本
 - 🌏 **多语言支持** - 完美支持中文、日文、韩文等多种 CJK 字符渲染，自动字体检测和配置
 - ⚡ **高性能** - Nailgun 优化减少 Java 启动开销
@@ -623,14 +644,18 @@ Special thanks to the PlantUML community and all contributors!
 npm install node-plantuml-2
 ```
 
-**就这么简单！** 该包会自动为您的平台安装捆绑的轻量级 JRE。**无需安装 Java！** 🎉
+**就这么简单！🎉 无需安装 Java！**
 
-捆绑的 JRE 通过特定平台的可选依赖自动安装：
-- **Windows x64**: `@node-plantuml-2/jre-win32-x64`
-- **macOS ARM64**: `@node-plantuml-2/jre-darwin-arm64`
-- **Linux x64**: `@node-plantuml-2/jre-linux-x64`
+该包会在安装时**自动检测您的平台**并安装轻量级 JRE（40-60MB）。您无需单独安装 Java - 一切自动处理！
 
-只会安装与您平台匹配的 JRE，保持安装轻量。
+**工作原理：**
+- 运行 `npm install` 时，包会自动检测您的操作系统和架构
+- 自动下载并安装匹配平台的 JRE runtime 包：
+  - **Windows x64** → `@node-plantuml-2/jre-win32-x64`
+  - **macOS ARM64** → `@node-plantuml-2/jre-darwin-arm64`
+  - **Linux x64** → `@node-plantuml-2/jre-linux-x64`
+- 只安装您平台的 JRE（其他平台自动跳过）
+- 开箱即用 - 无需配置！
 
 全局安装 CLI：
 
@@ -638,32 +663,46 @@ npm install node-plantuml-2
 npm install node-plantuml-2 -g
 ```
 
+**⚠️ 重要提示：** 您**无需**在系统上安装 Java。JRE 会在安装此 npm 包时自动集成。
+
 ### Java 要求
 
-本库使用 Java 来运行 PlantUML。**Java 会自动提供**，通过捆绑的 JRE 包 - 无需手动安装！
+**🎯 零 Java 安装要求！**
 
-**工作原理：**
+此包在安装时**自动集成最小 JRE**。您**无需**在系统上安装 Java！
 
-1. **捆绑的 JRE**（主要方式）- 通过 `optionalDependencies` 自动为您的平台安装
-   - 使用 `jlink` 构建的轻量级最小 JRE
-   - 每个平台仅约 40-60MB
-   - 开箱即用，无需配置
+**自动 JRE 集成：**
+
+当您运行 `npm install node-plantuml-2` 时，包会：
+1. **检测您的平台**（Windows/macOS/Linux 和架构）
+2. **自动下载**匹配的轻量级 JRE（40-60MB）
+3. **无缝集成** - 无需手动设置
+4. **立即可用** - 安装完成后即可使用
+
+**Java 解析优先级：**
+
+包使用以下优先级查找 Java：
+
+1. **捆绑的 JRE**（主要方式）⭐ - 在 `npm install` 时自动安装
+   - 平台特定：只下载您平台的 JRE
+   - 轻量级：约 40-60MB，使用 `jlink` 构建以获得最佳体积
+   - 零配置：开箱即用
 
 2. **系统 Java**（后备方案）- 如果捆绑的 JRE 不可用，会使用系统 Java（如果存在）
    - 检查 `JAVA_HOME` 环境变量
    - 检查系统 PATH 中的 `java` 命令
 
-3. **自定义 Java**（可选）- 通过 `options.javaPath` 指定自定义 Java 路径
+3. **自定义 Java**（可选）- 使用自定义 Java 路径覆盖：
    ```javascript
    plantuml.generate(code, { javaPath: '/custom/path/to/java' })
    ```
 
-**无需手动安装 Java！** 捆绑的 JRE 在支持的平台上开箱即用：
-- ✅ Windows x64
-- ✅ macOS ARM64 (Apple Silicon)
-- ✅ Linux x64
+**支持的平台（带自动 JRE）：**
+- ✅ Windows x64 - 自动集成 JRE
+- ✅ macOS ARM64 (Apple Silicon) - 自动集成 JRE
+- ✅ Linux x64 - 自动集成 JRE
 
-如果您更喜欢使用系统 Java，只需确保已安装 **Java Runtime Environment (JRE) 8+**，捆绑的 JRE 将自动跳过。
+**总结：安装 npm 包，Java 自动包含在内！无需单独安装 Java。**
 
 ---
 
@@ -1093,16 +1132,18 @@ Java 路径解析（优先级顺序）
 
 ## 📋 系统要求
 
-- **Node.js 12+**
-- **Java Runtime Environment (JRE) 8+** - **通过捆绑的 JRE 包自动提供**（无需安装！）
+- **Node.js 12+** - 仅此而已！
+- ~~**Java Runtime Environment (JRE)**~~ - **不需要！** 在 `npm install` 时自动集成
 - **Graphviz**（可选，用于高级图表类型）
 
-**支持的平台：**
-- ✅ Windows x64
-- ✅ macOS ARM64 (Apple Silicon)
-- ✅ Linux x64
+**✅ 支持的平台（带自动 JRE 集成）：**
+- Windows x64 - 在 `npm install` 时自动安装 JRE
+- macOS ARM64 (Apple Silicon) - 在 `npm install` 时自动安装 JRE
+- Linux x64 - 在 `npm install` 时自动安装 JRE
 
-**注意**：Java 通过特定平台的 npm 包自动捆绑 - **无需手动安装 Java！** 捆绑的轻量级 JRE 体积小（约 40-60MB），开箱即用。
+**🎯 关键点：** 您只需要安装 Node.js。Java 运行时会在您安装此包时自动下载并集成。**无需手动安装或配置 Java！**
+
+捆绑的 JRE 轻量级（约 40-60MB），专门为您的平台构建。
 
 ---
 
