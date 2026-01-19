@@ -44,35 +44,92 @@ function getJlinkPath () {
   var javaHome = process.env.JAVA_HOME
   if (javaHome) {
     var jlinkPath = path.join(javaHome, 'bin', process.platform === 'win32' ? 'jlink.exe' : 'jlink')
+    console.log('Checking for jlink at:', jlinkPath)
+    
+    // Check if file exists
     if (fs.existsSync(jlinkPath)) {
-      console.log('Using jlink from JAVA_HOME:', jlinkPath)
-      return jlinkPath
+      try {
+        var stats = fs.statSync(jlinkPath)
+        if (stats.isFile()) {
+          console.log('✓ Found jlink file at:', jlinkPath)
+          // Check executable permissions on Unix
+          if (process.platform !== 'win32') {
+            var mode = stats.mode
+            var isExecutable = (mode & parseInt('111', 8)) !== 0
+            if (!isExecutable) {
+              console.warn('Warning: jlink exists but may not be executable')
+            }
+          }
+          return jlinkPath
+        } else {
+          console.warn('Warning: jlink path exists but is not a file:', jlinkPath)
+        }
+      } catch (e) {
+        console.warn('Warning: Could not access jlink at:', jlinkPath, '-', e.message)
+      }
+    } else {
+      console.log('jlink not found at:', jlinkPath)
     }
+  } else {
+    console.log('JAVA_HOME not set')
   }
   
   // Fallback to 'jlink' in PATH
-  console.log('JAVA_HOME not set or jlink not found, trying system jlink...')
+  console.log('Trying system jlink from PATH...')
   return 'jlink'
 }
 
 // Check if jlink is available
 function checkJlink (jlinkPath) {
   return new Promise(function (resolve, reject) {
-    childProcess.exec('"' + jlinkPath + '" -version', function (err, stdout, stderr) {
-      if (err) {
-        console.error('Error: jlink not found at:', jlinkPath)
-        console.error('Please ensure JAVA_HOME is set or jlink is in PATH.')
-        console.error('On macOS: brew install openjdk@17')
-        console.error('On Ubuntu: sudo apt-get install openjdk-17-jdk')
-        reject(new Error('jlink not found'))
-      } else {
-        // jlink outputs version to stderr
-        if (stderr) {
-          console.log('jlink version:', stderr.trim().split('\n')[0])
+    var isAbsolutePath = path.isAbsolute(jlinkPath) || jlinkPath.includes(path.sep)
+    
+    if (isAbsolutePath) {
+      // Try execFile first (for binaries)
+      childProcess.execFile(jlinkPath, ['--version'], function (err, stdout, stderr) {
+        if (err) {
+          // If execFile fails, try with shell (for shell scripts)
+          console.log('execFile failed, trying with shell...')
+          childProcess.exec('"' + jlinkPath + '" --version', function (err2, stdout2, stderr2) {
+            if (err2) {
+              console.error('Error: Failed to execute jlink at:', jlinkPath)
+              console.error('Error details:', err2.message)
+              console.error('Please ensure JAVA_HOME points to a valid JDK installation.')
+              reject(new Error('jlink execution failed'))
+            } else {
+              // jlink outputs version to stderr
+              if (stderr2) {
+                console.log('jlink version:', stderr2.trim().split('\n')[0])
+              }
+              resolve()
+            }
+          })
+        } else {
+          // jlink outputs version to stderr
+          if (stderr) {
+            console.log('jlink version:', stderr.trim().split('\n')[0])
+          }
+          resolve()
         }
-        resolve()
-      }
-    })
+      })
+    } else {
+      // Use exec for commands in PATH
+      childProcess.exec('jlink --version', function (err, stdout, stderr) {
+        if (err) {
+          console.error('Error: jlink not found in PATH')
+          console.error('Please ensure JAVA_HOME is set or jlink is in PATH.')
+          console.error('On macOS: brew install openjdk@17')
+          console.error('On Ubuntu: sudo apt-get install openjdk-17-jdk')
+          reject(new Error('jlink not found'))
+        } else {
+          // jlink outputs version to stderr
+          if (stderr) {
+            console.log('jlink version:', stderr.trim().split('\n')[0])
+          }
+          resolve()
+        }
+      })
+    }
   })
 }
 
@@ -98,16 +155,13 @@ function buildJRE (jlinkPath) {
       '--output', jrePath
     ]
 
-    var child = childProcess.spawn(jlinkPath, jlinkArgs, {
-      stdio: 'inherit',
-      shell: process.platform === 'win32'
-    })
-
-    child.on('close', function (code) {
-      if (code !== 0) {
-        reject(new Error('jlink failed with exit code ' + code))
-        return
-      }
+    // Helper function to attach event handlers to child process
+    function attachHandlers (childProcessInstance) {
+      childProcessInstance.on('close', function (code) {
+        if (code !== 0) {
+          reject(new Error('jlink failed with exit code ' + code))
+          return
+        }
 
       // Set executable permissions (Unix platforms)
       if (PLATFORM !== 'win32') {
@@ -166,10 +220,50 @@ function buildJRE (jlinkPath) {
         resolve()
       })
     })
+  }
 
-    child.on('error', function (err) {
-      reject(err)
-    })
+    // Use spawn - for absolute paths, try without shell first, fallback to shell if needed
+    var isAbsolutePath = path.isAbsolute(jlinkPath) || jlinkPath.includes(path.sep)
+    var child
+    
+    if (isAbsolutePath) {
+      // For absolute paths, try without shell first (works for binaries)
+      child = childProcess.spawn(jlinkPath, jlinkArgs, {
+        stdio: 'inherit'
+      })
+      
+      // If spawn fails immediately (ENOENT/EACCES), try with shell (for shell scripts)
+      child.on('error', function (spawnErr) {
+        if (spawnErr.code === 'ENOENT' || spawnErr.code === 'EACCES') {
+          console.log('Direct spawn failed, trying with shell...')
+          // Retry with shell
+          var shellChild = childProcess.spawn(jlinkPath, jlinkArgs, {
+            stdio: 'inherit',
+            shell: true
+          })
+          // Attach handlers to the shell child
+          attachHandlers(shellChild)
+          shellChild.on('error', function (shellErr) {
+            reject(new Error('Failed to spawn jlink: ' + shellErr.message))
+          })
+        } else {
+          reject(new Error('Failed to spawn jlink: ' + spawnErr.message))
+        }
+      })
+      
+      // Attach handlers if spawn succeeds
+      attachHandlers(child)
+    } else {
+      // For commands in PATH, use spawn with shell on Windows
+      child = childProcess.spawn(jlinkPath, jlinkArgs, {
+        stdio: 'inherit',
+        shell: process.platform === 'win32'
+      })
+      attachHandlers(child)
+      child.on('error', function (err) {
+        reject(new Error('Failed to spawn jlink: ' + err.message))
+      })
+    }
   })
 }
 
