@@ -209,6 +209,7 @@ jobs:
           jlink --version
 
       - name: Install dependencies
+        shell: bash
         run: |
           if [ -f package-lock.json ]; then
             npm ci
@@ -310,6 +311,7 @@ jobs:
           fi
 
       - name: Verify NPM authentication
+        shell: bash
         run: |
           echo "🔍 Verifying npm authentication..."
           npm whoami || {
