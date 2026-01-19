@@ -28,7 +28,6 @@
   "optionalDependencies": {
     "@node-plantuml-2/jre-win32-x64": "^1.0.0",
     "@node-plantuml-2/jre-darwin-arm64": "^1.0.0",
-    "@node-plantuml-2/jre-darwin-x64": "^1.0.0",
     "@node-plantuml-2/jre-linux-x64": "^1.0.0"
   },
   "devDependencies": {
@@ -44,7 +43,8 @@
     "resources/",
     "nail/plantumlnail.jar",
     "scripts/download.js",
-    "scripts/get-vizjs.js"
+    "scripts/get-vizjs.js",
+    "README.md"
   ],
   "scripts": {
     "prepublish": "node scripts/get-plantuml-jar.js --latest || echo 'JAR download failed, continuing...'",

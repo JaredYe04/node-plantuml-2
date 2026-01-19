@@ -57,8 +57,8 @@ var packageJson = {
     url: 'https://github.com/JaredYe04/node-plantuml-2.git',
     directory: 'runtimes/@node-plantuml-2/jre-' + PLATFORM + '-' + ARCH
   },
-  license: 'GPL-2.0 WITH Classpath-exception-2.0',
-  author: 'Markus Hedvall <mackanhedvall@gmail.com>'
+  license: 'MIT',
+  author: 'JaredYe04 <1010268129@outlook.com>'
 }
 
 // Create output directory if it doesn't exist

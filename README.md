@@ -43,7 +43,6 @@ npm install node-plantuml-2
 The bundled JRE is automatically installed via platform-specific optional dependencies:
 - **Windows x64**: `@node-plantuml-2/jre-win32-x64`
 - **macOS ARM64**: `@node-plantuml-2/jre-darwin-arm64`
-- **macOS x64**: `@node-plantuml-2/jre-darwin-x64`
 - **Linux x64**: `@node-plantuml-2/jre-linux-x64`
 
 Only the JRE matching your platform will be installed, keeping the installation lightweight.
@@ -76,7 +75,7 @@ This library uses Java to run PlantUML. **Java is automatically provided** via b
 
 **No manual Java installation required!** The bundled JRE works out of the box on supported platforms:
 - ✅ Windows x64
-- ✅ macOS x64 and ARM64
+- ✅ macOS ARM64 (Apple Silicon)
 - ✅ Linux x64
 
 If you prefer to use system Java instead, ensure **Java Runtime Environment (JRE) 8+** is installed, and the bundled JRE will be automatically skipped.
@@ -521,7 +520,7 @@ Return Stream
 
 **Supported Platforms:**
 - ✅ Windows x64
-- ✅ macOS x64 and ARM64 (Apple Silicon)
+- ✅ macOS ARM64 (Apple Silicon)
 - ✅ Linux x64
 
 **Note**: Java is automatically bundled via platform-specific npm packages - **no manual Java installation required!** The bundled minimal JRE is lightweight (~40-60MB) and works out of the box.
@@ -629,7 +628,6 @@ npm install node-plantuml-2
 捆绑的 JRE 通过特定平台的可选依赖自动安装：
 - **Windows x64**: `@node-plantuml-2/jre-win32-x64`
 - **macOS ARM64**: `@node-plantuml-2/jre-darwin-arm64`
-- **macOS x64**: `@node-plantuml-2/jre-darwin-x64`
 - **Linux x64**: `@node-plantuml-2/jre-linux-x64`
 
 只会安装与您平台匹配的 JRE，保持安装轻量。
@@ -662,7 +660,7 @@ npm install node-plantuml-2 -g
 
 **无需手动安装 Java！** 捆绑的 JRE 在支持的平台上开箱即用：
 - ✅ Windows x64
-- ✅ macOS x64 和 ARM64
+- ✅ macOS ARM64 (Apple Silicon)
 - ✅ Linux x64
 
 如果您更喜欢使用系统 Java，只需确保已安装 **Java Runtime Environment (JRE) 8+**，捆绑的 JRE 将自动跳过。
@@ -1101,7 +1099,7 @@ Java 路径解析（优先级顺序）
 
 **支持的平台：**
 - ✅ Windows x64
-- ✅ macOS x64 和 ARM64 (Apple Silicon)
+- ✅ macOS ARM64 (Apple Silicon)
 - ✅ Linux x64
 
 **注意**：Java 通过特定平台的 npm 包自动捆绑 - **无需手动安装 Java！** 捆绑的轻量级 JRE 体积小（约 40-60MB），开箱即用。
