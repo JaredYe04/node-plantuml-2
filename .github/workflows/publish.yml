@@ -158,6 +158,23 @@ jobs:
           echo "📦 Version to publish: $VERSION"
           echo "✅ Version ready"
 
+      - name: Download PlantUML JAR
+        shell: bash
+        run: |
+          echo "📥 Downloading PlantUML JAR (will be shared with other jobs)..."
+          node scripts/get-plantuml-jar.js --latest || echo "JAR download failed, but continuing..."
+        continue-on-error: true
+
+      - name: Upload PlantUML JAR as artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vendor-files
+          path: |
+            vendor/plantuml.jar
+            vendor/**
+          retention-days: 1
+
   build-and-publish-runtimes:
     needs: prepare
     strategy:
@@ -231,11 +248,33 @@ jobs:
             npm install
           fi
 
-      - name: Download PlantUML JAR
+      - name: Download PlantUML JAR from artifact
+        id: download-vendor
+        uses: actions/download-artifact@v4
+        if: always()
+        with:
+          name: vendor-files
+          path: vendor/
+          merge-multiple: true
+
+      - name: Download PlantUML JAR (fallback if artifact missing)
+        shell: bash
+        if: steps.download-vendor.outcome == 'failure'
+        run: |
+          echo "📥 Artifact not available - Downloading PlantUML JAR (fallback)..."
+          node scripts/get-plantuml-jar.js --latest || echo "JAR download failed, but continuing..."
+        continue-on-error: true
+
+      - name: Verify PlantUML JAR exists
         shell: bash
         run: |
-          echo "📥 Downloading PlantUML JAR..."
-          node scripts/get-plantuml-jar.js --latest || echo "JAR download failed, but continuing..."
+          if [ ! -f "vendor/plantuml.jar" ]; then
+            echo "📥 PlantUML JAR not found - Downloading..."
+            node scripts/get-plantuml-jar.js --latest || echo "JAR download failed, but continuing..."
+          else
+            echo "✓ PlantUML JAR found"
+          fi
+        continue-on-error: true
 
       - name: Create runtime directory
         shell: bash
@@ -450,6 +489,34 @@ jobs:
             npm install
           fi
 
+      - name: Download PlantUML JAR from artifact
+        id: download-vendor
+        uses: actions/download-artifact@v4
+        if: always()
+        with:
+          name: vendor-files
+          path: vendor/
+          merge-multiple: true
+
+      - name: Download PlantUML JAR (fallback if artifact missing)
+        shell: bash
+        if: steps.download-vendor.outcome == 'failure'
+        run: |
+          echo "📥 Artifact not available - Downloading PlantUML JAR (fallback)..."
+          node scripts/get-plantuml-jar.js --latest || echo "JAR download failed, but continuing..."
+        continue-on-error: true
+
+      - name: Verify PlantUML JAR exists
+        shell: bash
+        run: |
+          if [ ! -f "vendor/plantuml.jar" ]; then
+            echo "📥 PlantUML JAR not found - Downloading..."
+            node scripts/get-plantuml-jar.js --latest || echo "JAR download failed, but continuing..."
+          else
+            echo "✓ PlantUML JAR found"
+          fi
+        continue-on-error: true
+
       - name: Update version and optionalDependencies
         run: |
           VERSION="${{ needs.prepare.outputs.version }}"
@@ -475,10 +542,25 @@ jobs:
             console.log('✅ Updated optionalDependencies to version ' + version);
           "
 
-      - name: Download PlantUML JAR
+      - name: Download PlantUML JAR from artifact
+        id: download-vendor-main
+        uses: actions/download-artifact@v4
+        if: always()
+        with:
+          name: vendor-files
+          path: vendor/
+          merge-multiple: true
+
+      - name: Download PlantUML JAR (fallback if artifact missing)
+        shell: bash
+        if: |
+          always() && 
+          (steps.download-vendor-main.outcome == 'failure' || 
+           !hashFiles('vendor/plantuml.jar'))
         run: |
-          echo "📥 Downloading latest PlantUML JAR..."
+          echo "📥 Artifact not available - Downloading PlantUML JAR (fallback)..."
           node scripts/get-plantuml-jar.js --latest || echo "JAR download failed, but continuing..."
+        continue-on-error: true
 
       - name: Verify NPM authentication
         run: |
