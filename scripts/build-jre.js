@@ -38,16 +38,38 @@ console.log('Building JRE for platform:', PLATFORM, 'architecture:', ARCH)
 console.log('Output directory:', OUTPUT_DIR)
 console.log('')
 
+// Get jlink executable path
+function getJlinkPath () {
+  // Try JAVA_HOME first
+  var javaHome = process.env.JAVA_HOME
+  if (javaHome) {
+    var jlinkPath = path.join(javaHome, 'bin', process.platform === 'win32' ? 'jlink.exe' : 'jlink')
+    if (fs.existsSync(jlinkPath)) {
+      console.log('Using jlink from JAVA_HOME:', jlinkPath)
+      return jlinkPath
+    }
+  }
+  
+  // Fallback to 'jlink' in PATH
+  console.log('JAVA_HOME not set or jlink not found, trying system jlink...')
+  return 'jlink'
+}
+
 // Check if jlink is available
-function checkJlink () {
+function checkJlink (jlinkPath) {
   return new Promise(function (resolve, reject) {
-    childProcess.exec('jlink -version', function (err) {
+    childProcess.exec('"' + jlinkPath + '" -version', function (err, stdout, stderr) {
       if (err) {
-        console.error('Error: jlink not found. Please install JDK 17+ with jlink.')
+        console.error('Error: jlink not found at:', jlinkPath)
+        console.error('Please ensure JAVA_HOME is set or jlink is in PATH.')
         console.error('On macOS: brew install openjdk@17')
         console.error('On Ubuntu: sudo apt-get install openjdk-17-jdk')
         reject(new Error('jlink not found'))
       } else {
+        // jlink outputs version to stderr
+        if (stderr) {
+          console.log('jlink version:', stderr.trim().split('\n')[0])
+        }
         resolve()
       }
     })
@@ -55,7 +77,7 @@ function checkJlink () {
 }
 
 // Build JRE with jlink
-function buildJRE () {
+function buildJRE (jlinkPath) {
   return new Promise(function (resolve, reject) {
     var jrePath = path.join(OUTPUT_DIR, 'jre')
     
@@ -65,6 +87,7 @@ function buildJRE () {
     }
 
     console.log('Running jlink...')
+    console.log('Using jlink:', jlinkPath)
     
     var jlinkArgs = [
       '--add-modules', 'java.base,java.desktop,java.xml,java.logging',
@@ -75,7 +98,7 @@ function buildJRE () {
       '--output', jrePath
     ]
 
-    var child = childProcess.spawn('jlink', jlinkArgs, {
+    var child = childProcess.spawn(jlinkPath, jlinkArgs, {
       stdio: 'inherit',
       shell: process.platform === 'win32'
     })
@@ -151,8 +174,11 @@ function buildJRE () {
 }
 
 // Main
-checkJlink()
-  .then(buildJRE)
+var jlinkPath = getJlinkPath()
+checkJlink(jlinkPath)
+  .then(function () {
+    return buildJRE(jlinkPath)
+  })
   .then(function () {
     process.exit(0)
   })

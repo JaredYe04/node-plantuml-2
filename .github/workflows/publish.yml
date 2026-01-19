@@ -205,8 +205,22 @@ jobs:
       - name: Verify Java installation
         shell: bash
         run: |
+          echo "Java version:"
           java -version
-          jlink --version
+          echo ""
+          echo "JAVA_HOME: $JAVA_HOME"
+          echo ""
+          echo "Checking jlink..."
+          if [ -f "$JAVA_HOME/bin/jlink" ]; then
+            echo "✓ jlink found at: $JAVA_HOME/bin/jlink"
+            "$JAVA_HOME/bin/jlink" --version
+          elif command -v jlink &> /dev/null; then
+            echo "✓ jlink found in PATH"
+            jlink --version
+          else
+            echo "❌ Error: jlink not found in JAVA_HOME/bin or PATH"
+            exit 1
+          fi
 
       - name: Install dependencies
         shell: bash
@@ -238,6 +252,9 @@ jobs:
         shell: bash
         run: |
           echo "🔨 Building JRE for ${{ matrix.platform }} ${{ matrix.arch }}..."
+          echo "JAVA_HOME: $JAVA_HOME"
+          # Ensure JAVA_HOME is available for the Node.js script
+          export JAVA_HOME="$JAVA_HOME"
           node scripts/build-jre.js ${{ matrix.platform }} ${{ matrix.arch }}
 
       - name: Verify JRE
