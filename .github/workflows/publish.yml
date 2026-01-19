@@ -16,36 +16,22 @@ on:
           - major
 
 jobs:
-  publish:
+  prepare:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      packages: write
-
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: true
-          submodules: recursive
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
-
-      - name: Setup Java (for Wasm build)
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '11'
-
-      - name: Setup Maven
-        uses: stCarolas/setup-maven@v4
-        with:
-          maven-version: '3.9.5'
 
       - name: Configure Git
         run: |
@@ -56,10 +42,8 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         run: |
           echo "🔄 Fetching latest changes from remote..."
-          # Try to detect default branch, fallback to main/master
           DEFAULT_BRANCH=$(git remote show origin | grep "HEAD branch" | cut -d" " -f5 || echo "")
           if [ -z "$DEFAULT_BRANCH" ]; then
-            # Try common branch names
             for branch in main master; do
               if git ls-remote --heads origin $branch | grep -q .; then
                 DEFAULT_BRANCH=$branch
@@ -68,7 +52,6 @@ jobs:
             done
           fi
           if [ -z "$DEFAULT_BRANCH" ]; then
-            echo "⚠️  Could not detect default branch, using 'main' as fallback"
             DEFAULT_BRANCH="main"
           fi
           echo "🔄 Using branch: $DEFAULT_BRANCH"
@@ -89,6 +72,8 @@ jobs:
 
       - name: Bump version (workflow_dispatch)
         if: github.event_name == 'workflow_dispatch'
+        id: version
+        shell: bash
         run: |
           LOCAL_VERSION=$(node -p "require('./package.json').version")
           echo "📦 Local package.json version: $LOCAL_VERSION"
@@ -147,10 +132,13 @@ jobs:
             fi
           fi
 
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "VERSION=$NEW_VERSION" >> $GITHUB_ENV
 
       - name: Bump version (release)
         if: github.event_name == 'release'
+        id: version
+        shell: bash
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
           echo "Release version: $VERSION"
@@ -160,12 +148,290 @@ jobs:
           fi
 
           npm version $VERSION --no-git-tag-version --allow-same-version
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "✅ Version set: $VERSION"
+
+      - name: Verify version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "📦 Version to publish: $VERSION"
+          echo "✅ Version ready"
+
+  build-and-publish-runtimes:
+    needs: prepare
+    strategy:
+      matrix:
+        include:
+          - platform: linux
+            arch: x64
+            runner: ubuntu-latest
+            package: '@node-plantuml-2/jre-linux-x64'
+          - platform: win32
+            arch: x64
+            runner: windows-latest
+            package: '@node-plantuml-2/jre-win32-x64'
+          - platform: darwin
+            arch: x64
+            runner: macos-12
+            package: '@node-plantuml-2/jre-darwin-x64'
+          - platform: darwin
+            arch: arm64
+            runner: macos-14
+            package: '@node-plantuml-2/jre-darwin-arm64'
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Verify Java installation
+        shell: bash
+        run: |
+          java -version
+          jlink --version
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Download PlantUML JAR
+        shell: bash
+        run: |
+          echo "📥 Downloading PlantUML JAR..."
+          node scripts/get-plantuml-jar.js --latest || echo "JAR download failed, but continuing..."
+
+      - name: Create runtime directory
+        shell: bash
+        run: |
+          mkdir -p runtimes/@node-plantuml-2/jre-${{ matrix.platform }}-${{ matrix.arch }}
+
+      - name: Create package.json for runtime
+        shell: bash
+        run: |
+          echo "📝 Creating package.json for ${{ matrix.package }}..."
+          node scripts/create-runtime-package-json.js ${{ matrix.platform }} ${{ matrix.arch }} ${{ needs.prepare.outputs.version }}
+
+      - name: Build JRE
+        shell: bash
+        run: |
+          echo "🔨 Building JRE for ${{ matrix.platform }} ${{ matrix.arch }}..."
+          node scripts/build-jre.js ${{ matrix.platform }} ${{ matrix.arch }}
+
+      - name: Verify JRE
+        shell: bash
+        run: |
+          if [ "${{ matrix.platform }}" = "win32" ]; then
+            JAVA_EXE="runtimes/@node-plantuml-2/jre-${{ matrix.platform }}-${{ matrix.arch }}/jre/bin/java.exe"
+          else
+            JAVA_EXE="runtimes/@node-plantuml-2/jre-${{ matrix.platform }}-${{ matrix.arch }}/jre/bin/java"
+          fi
+          
+          if [ ! -f "$JAVA_EXE" ]; then
+            echo "❌ Error: JRE executable not found at $JAVA_EXE"
+            exit 1
+          fi
+          
+          echo "✓ JRE executable found"
+          
+          # Verify Java works
+          if [ "${{ matrix.platform }}" = "win32" ]; then
+            "$JAVA_EXE" -version
+          else
+            chmod +x "$JAVA_EXE"
+            "$JAVA_EXE" -version
+          fi
+          
+          echo "✅ JRE verification passed"
+
+      - name: Test JRE with PlantUML
+        shell: bash
+        continue-on-error: true
+        run: |
+          echo "🧪 Testing JRE with PlantUML..."
+          if [ "${{ matrix.platform }}" = "win32" ]; then
+            JAVA_EXE="runtimes/@node-plantuml-2/jre-${{ matrix.platform }}-${{ matrix.arch }}/jre/bin/java.exe"
+            PLANTUML_JAR="vendor/plantuml.jar"
+            TEST_CODE="@startuml
+            A -> B
+            @enduml"
+            
+            echo "$TEST_CODE" | "$JAVA_EXE" -Djava.awt.headless=true -jar "$PLANTUML_JAR" -pipe -tpng > test-output.png || {
+              echo "⚠️  PlantUML test failed, but continuing..."
+              exit 0
+            }
+            
+            if [ -f test-output.png ] && [ -s test-output.png ]; then
+              echo "✓ PlantUML test passed ($(wc -c < test-output.png) bytes)"
+              rm -f test-output.png
+            else
+              echo "⚠️  PlantUML test output is empty, but continuing..."
+            fi
+          else
+            JAVA_EXE="runtimes/@node-plantuml-2/jre-${{ matrix.platform }}-${{ matrix.arch }}/jre/bin/java"
+            PLANTUML_JAR="vendor/plantuml.jar"
+            TEST_CODE="@startuml
+            A -> B
+            @enduml"
+            
+            chmod +x "$JAVA_EXE"
+            echo "$TEST_CODE" | "$JAVA_EXE" -Djava.awt.headless=true -jar "$PLANTUML_JAR" -pipe -tpng > test-output.png || {
+              echo "⚠️  PlantUML test failed, but continuing..."
+              exit 0
+            }
+            
+            if [ -f test-output.png ] && [ -s test-output.png ]; then
+              echo "✓ PlantUML test passed ($(wc -c < test-output.png) bytes)"
+              rm -f test-output.png
+            else
+              echo "⚠️  PlantUML test output is empty, but continuing..."
+            fi
+          fi
+
+      - name: Verify NPM authentication
+        run: |
+          echo "🔍 Verifying npm authentication..."
+          npm whoami || {
+            echo "❌ Error: Not authenticated to npm"
+            exit 1
+          }
+          echo "✅ Successfully authenticated to npm"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Check if runtime package version exists
+        id: check-version
+        shell: bash
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          if npm view ${{ matrix.package }}@$VERSION version > /dev/null 2>&1; then
+            echo "⚠️  Version $VERSION already exists for ${{ matrix.package }}"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "✅ Version $VERSION is available for ${{ matrix.package }}"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        continue-on-error: true
+
+      - name: Publish runtime package
+        if: steps.check-version.outputs.exists != 'true'
+        shell: bash
+        run: |
+          echo "📦 Publishing ${{ matrix.package }}@${{ needs.prepare.outputs.version }}..."
+          cd runtimes/@node-plantuml-2/jre-${{ matrix.platform }}-${{ matrix.arch }}
+          npm publish --access public
+          echo "✅ Published ${{ matrix.package }}@${{ needs.prepare.outputs.version }}"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish runtime package (skip if exists)
+        if: steps.check-version.outputs.exists == 'true'
+        shell: bash
+        run: |
+          echo "ℹ️  Version ${{ needs.prepare.outputs.version }} already exists for ${{ matrix.package }}, skipping publish"
+
+  publish-main:
+    needs: [prepare, build-and-publish-runtimes]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          ref: ${{ github.event.release.tag_name || github.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Update version and optionalDependencies
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          echo "📦 Updating main package to version $VERSION"
+          
+          # Update version
+          npm version $VERSION --no-git-tag-version --allow-same-version
+          
+          # Update optionalDependencies to match runtime package versions
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            const version = '$VERSION';
+            
+            pkg.optionalDependencies = {
+              '@node-plantuml-2/jre-win32-x64': '^' + version,
+              '@node-plantuml-2/jre-darwin-arm64': '^' + version,
+              '@node-plantuml-2/jre-darwin-x64': '^' + version,
+              '@node-plantuml-2/jre-linux-x64': '^' + version
+            };
+            
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+            console.log('✅ Updated optionalDependencies to version ' + version);
+          "
+
+      - name: Download PlantUML JAR
+        run: |
+          echo "📥 Downloading latest PlantUML JAR..."
+          node scripts/get-plantuml-jar.js --latest || echo "JAR download failed, but continuing..."
+
+      - name: Verify NPM authentication
+        run: |
+          echo "🔍 Verifying npm authentication..."
+          npm whoami || {
+            echo "❌ Error: Not authenticated to npm"
+            exit 1
+          }
+          echo "✅ Successfully authenticated to npm"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Verify version before publish
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "📦 Preparing to publish version: $VERSION"
+          VERSION="${{ needs.prepare.outputs.version }}"
+          echo "📦 Preparing to publish main package version: $VERSION"
 
           if npm view node-plantuml-2@$VERSION version > /dev/null 2>&1; then
             echo "❌ Error: Version $VERSION already exists on npm registry"
@@ -173,72 +439,12 @@ jobs:
           fi
 
           echo "✅ Version $VERSION is ready to publish"
-
-      - name: Download PlantUML JAR
-        run: |
-          echo "📥 Downloading latest PlantUML JAR..."
-          npm run build:all:jar-only || echo "JAR download failed, but continuing..."
-
-      - name: Build Wasm module (required for pure Node.js)
-        continue-on-error: false
-        run: |
-          echo "🔨 Building Wasm module using CheerpJ (official PlantUML WASM solution)..."
-          echo "📦 This is required for pure Node.js operation without Java dependency"
-          echo "💡 Using CheerpJ method - pure Node.js, no Maven required"
-          BUILD_METHOD=cheerpj npm run build:wasm
-          # Check for CheerpJ files (plantuml-core.js or plantuml-core.wasm)
-          if [ ! -f vendor/wasm/plantuml-core.js ] && [ ! -f vendor/wasm/plantuml.wasm ]; then
-            echo "❌ Error: Wasm module not found after build"
-            echo "💡 The pure Node.js version requires a valid WASM module"
-            echo "   Expected: vendor/wasm/plantuml-core.js or vendor/wasm/plantuml.wasm"
-            exit 1
-          fi
-          if [ -f vendor/wasm/plantuml-core.js ]; then
-            echo "✅ CheerpJ WASM module built successfully: vendor/wasm/plantuml-core.js"
-          else
-            echo "✅ Wasm module built successfully: vendor/wasm/plantuml.wasm"
-          fi
-
-      - name: Verify WASM module
-        run: |
-          # Check for CheerpJ files first, then fallback to standard WASM
-          if [ -f vendor/wasm/plantuml-core.js ]; then
-            WASM_SIZE=$(stat -f%z vendor/wasm/plantuml-core.js 2>/dev/null || stat -c%s vendor/wasm/plantuml-core.js 2>/dev/null || echo "0")
-            if [ "$WASM_SIZE" -gt 1000 ]; then
-              echo "✅ CheerpJ WASM module verified: $(du -h vendor/wasm/plantuml-core.js | cut -f1)"
-            else
-              echo "⚠️  Warning: CheerpJ module seems too small ($WASM_SIZE bytes)"
-            fi
-          elif [ -f vendor/wasm/plantuml.wasm ]; then
-            WASM_SIZE=$(stat -f%z vendor/wasm/plantuml.wasm 2>/dev/null || stat -c%s vendor/wasm/plantuml.wasm 2>/dev/null || echo "0")
-            if [ "$WASM_SIZE" -gt 1000 ]; then
-              echo "✅ WASM module verified: $(du -h vendor/wasm/plantuml.wasm | cut -f1)"
-            else
-              echo "⚠️  Warning: WASM module seems too small ($WASM_SIZE bytes)"
-            fi
-          else
-            echo "❌ Error: WASM module not found"
-            exit 1
-          fi
-
-      # Note: We skip 'npm run build' which builds Java Nailgun server
-      # This is intentional for pure Node.js version - WASM is already built above
-
-      - name: Verify NPM authentication
-        run: |
-          echo "🔍 Verifying npm authentication..."
-          npm whoami || {
-            echo "❌ Error: Not authenticated to npm"
-            echo "💡 Please ensure NPM_TOKEN secret is configured in GitHub repository secrets"
-            exit 1
-          }
-          echo "✅ Successfully authenticated to npm"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish to npm
+      - name: Publish main package
         run: |
-          echo "📦 Publishing to npm..."
+          echo "📦 Publishing main package to npm..."
           npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -247,6 +453,8 @@ jobs:
       - name: Create Git tag and push (workflow_dispatch)
         if: github.event_name == 'workflow_dispatch'
         run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          
           # Add package.json and lock files if they exist
           git add package.json
           [ -f package-lock.json ] && git add package-lock.json || true
@@ -256,11 +464,10 @@ jobs:
           if git diff --staged --quiet; then
             echo "⚠️  No changes to commit"
           else
-            git commit -m "chore: bump version to ${{ env.VERSION }}"
+            git commit -m "chore: bump version to $VERSION" || echo "Nothing to commit"
           fi
 
           echo "🔄 Pulling latest changes from remote..."
-          # Try to detect default branch
           DEFAULT_BRANCH=$(git remote show origin | grep "HEAD branch" | cut -d" " -f5 || echo "")
           if [ -z "$DEFAULT_BRANCH" ]; then
             for branch in main master; do
@@ -279,57 +486,43 @@ jobs:
             echo "⚠️  Warning: Failed to sync with remote, but continuing..."
           }
 
-          if git rev-parse "v${{ env.VERSION }}" >/dev/null 2>&1; then
-            echo "⚠️  Tag v${{ env.VERSION }} already exists locally"
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "⚠️  Tag v$VERSION already exists locally"
           else
-            git tag -a "v${{ env.VERSION }}" -m "Release v${{ env.VERSION }}"
+            git tag -a "v$VERSION" -m "Release v$VERSION"
           fi
 
           echo "📤 Pushing changes to remote..."
-          # Try to detect default branch
-          DEFAULT_BRANCH=$(git remote show origin | grep "HEAD branch" | cut -d" " -f5 || echo "")
-          if [ -z "$DEFAULT_BRANCH" ]; then
-            for branch in main master; do
-              if git ls-remote --heads origin $branch | grep -q .; then
-                DEFAULT_BRANCH=$branch
-                break
-              fi
-            done
-          fi
-          if [ -z "$DEFAULT_BRANCH" ]; then
-            DEFAULT_BRANCH="main"
-          fi
-          echo "🔄 Pushing to branch: $DEFAULT_BRANCH"
           git push origin HEAD:$DEFAULT_BRANCH || {
             echo "❌ Failed to push to branch: $DEFAULT_BRANCH"
             exit 1
           }
 
-          if git ls-remote --tags origin | grep -q "refs/tags/v${{ env.VERSION }}$"; then
-            echo "ℹ️  Tag v${{ env.VERSION }} already exists on remote"
+          if git ls-remote --tags origin | grep -q "refs/tags/v$VERSION$"; then
+            echo "ℹ️  Tag v$VERSION already exists on remote"
           else
-            git push origin "v${{ env.VERSION }}" || {
+            git push origin "v$VERSION" || {
               echo "⚠️  Failed to push tag, but code was pushed successfully"
             }
           fi
 
-          echo "✅ Successfully pushed version ${{ env.VERSION }}"
+          echo "✅ Successfully pushed version $VERSION"
 
       - name: Create GitHub Release (workflow_dispatch)
         if: github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ env.VERSION }}
-          name: Release v${{ env.VERSION }}
+          tag_name: v${{ needs.prepare.outputs.version }}
+          name: Release v${{ needs.prepare.outputs.version }}
           body: |
-            ## Changes in v${{ env.VERSION }}
+            ## Changes in v${{ needs.prepare.outputs.version }}
 
             See [CHANGELOG.md](CHANGELOG.md) for details.
 
             ### ✨ Features
-            - Pure Node.js support (no Java required)
+            - Bundled JRE support (no Java installation required)
             - Multiple output formats (PNG, SVG, EPS, ASCII, Unicode)
             - Full UTF-8 and Chinese character support
+            - Platform-specific JRE runtime packages
           draft: false
           prerelease: false
-

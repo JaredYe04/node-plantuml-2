@@ -1,8 +1,8 @@
 {
   "name": "node-plantuml-2",
   "version": "1.0.2",
-  "plantumlVersion": "1.2026.0",
-  "description": "Pure Node.js PlantUML renderer - No Java required! Multiple output formats (PNG, SVG, EPS, ASCII, Unicode) with full UTF-8 support",
+  "plantumlVersion": "1.2026.1",
+  "description": "Node.js PlantUML renderer with Java backend. Multiple output formats (PNG, SVG, EPS, ASCII, Unicode) with full UTF-8 support",
   "main": "index.js",
   "author": "Markus Hedvall <mackanhedvall@gmail.com>",
   "repository": "https://github.com/JaredYe04/node-plantuml-2",
@@ -14,10 +14,6 @@
     "plantuml",
     "uml",
     "diagram",
-    "wasm",
-    "webassembly",
-    "pure-node",
-    "no-java",
     "svg",
     "png",
     "markdown",
@@ -29,6 +25,12 @@
     "node-nailgun-server": "^0.1.4",
     "plantuml-encoder": "^1.2.5"
   },
+  "optionalDependencies": {
+    "@node-plantuml-2/jre-win32-x64": "^1.0.0",
+    "@node-plantuml-2/jre-darwin-arm64": "^1.0.0",
+    "@node-plantuml-2/jre-darwin-x64": "^1.0.0",
+    "@node-plantuml-2/jre-linux-x64": "^1.0.0"
+  },
   "devDependencies": {
     "chai": "^4.x",
     "mocha": "^5.x",
@@ -39,7 +41,6 @@
     "index.js",
     "lib/",
     "vendor/plantuml.jar",
-    "vendor/wasm/plantuml.wasm",
     "resources/",
     "nail/plantumlnail.jar",
     "scripts/download.js",
@@ -47,19 +48,13 @@
   ],
   "scripts": {
     "prepublish": "node scripts/get-plantuml-jar.js --latest || echo 'JAR download failed, continuing...'",
-    "build:wasm:publish": "node scripts/get-plantuml-jar.js --latest && node scripts/build-plantuml-wasm.js",
     "postinstall": "node scripts/get-vizjs.js",
     "test": "standard && node test/fixtures/prepare.js && mocha",
     "test:batch": "node test/batch-convert-test.js",
     "test:batch:svg": "node test/batch-convert-test.js --svg",
     "test:batch:png": "node test/batch-convert-test.js --png",
     "build": "node nail/build.js",
-    "build:wasm": "node scripts/build-plantuml-wasm.js --method cheerpj",
-    "build:wasm:cheerpj": "node scripts/build-plantuml-wasm.js --method cheerpj",
-    "build:wasm:bytecoder": "node scripts/build-plantuml-wasm.js --method bytecoder",
-    "build:all": "node scripts/build-all.js",
-    "build:all:jar-only": "node scripts/build-all.js --skip-wasm",
-    "build:all:wasm-only": "node scripts/build-all.js --skip-jar"
+    "build:all": "node scripts/build-all.js"
   },
   "bin": {
     "puml": "index.js"

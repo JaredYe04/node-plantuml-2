@@ -6,7 +6,6 @@
  *
  * This script performs all necessary steps:
  * 1. Download latest PlantUML JAR
- * 2. Build Wasm module from JAR
  *
  * Usage:
  *   node scripts/build-all.js [options]
@@ -99,16 +98,16 @@ function checkPrerequisites () {
   }
   console.log('✓ Node.js version: ' + nodeVersion)
 
-  // Check Java (for Wasm build)
+  // Check Java (required for running PlantUML)
   try {
     childProcess.execSync('java -version', {
       stdio: 'pipe',
       encoding: 'utf-8'
     })
-    console.log('✓ Java found')
+    console.log('✓ Java found (required for PlantUML execution)')
   } catch (e) {
-    console.warn('⚠ Java not found - Wasm build may fail')
-    console.warn('  Install Java to build Wasm module')
+    console.warn('⚠ Java not found - PlantUML execution requires Java')
+    console.warn('  Install Java to use this library: https://www.java.com/')
   }
 
   return true
@@ -120,7 +119,6 @@ function checkPrerequisites () {
 function buildAll (options, callback) {
   options = options || {}
   var skipJar = options.skipJar === true
-  var skipWasm = options.skipWasm === true
 
   console.log('')
   console.log('╔'.repeat(30))
@@ -143,16 +141,6 @@ function buildAll (options, callback) {
       name: 'Download PlantUML JAR',
       script: 'get-plantuml-jar.js',
       args: ['--latest']
-    })
-  }
-
-  // Step 2: Build Wasm module (experimental, non-blocking)
-  if (!skipWasm) {
-    steps.push({
-      name: 'Build Wasm Module (Experimental)',
-      script: 'build-plantuml-wasm.js',
-      args: [],
-      optional: true // Don't fail the entire build if this fails
     })
   }
 
@@ -180,9 +168,6 @@ function buildAll (options, callback) {
         console.log('Next steps:')
         console.log('  - Run tests: npm test')
         console.log('  - Run batch conversion: npm run test:batch')
-        if (errors.length > 0) {
-          console.log('  - Note: Wasm executor is experimental, using Java executor for now')
-        }
         if (typeof callback === 'function') {
           callback(null)
         }
@@ -226,8 +211,7 @@ function buildAll (options, callback) {
 if (require.main === module) {
   var args = process.argv.slice(2)
   var options = {
-    skipJar: args.indexOf('--skip-jar') !== -1,
-    skipWasm: args.indexOf('--skip-wasm') !== -1
+    skipJar: args.indexOf('--skip-jar') !== -1
   }
 
   if (args.indexOf('--help') !== -1 || args.indexOf('-h') !== -1) {
@@ -235,14 +219,17 @@ if (require.main === module) {
     console.log('')
     console.log('Options:')
     console.log('  --skip-jar      Skip downloading PlantUML JAR')
-    console.log('  --skip-wasm     Skip building Wasm module')
     console.log('  -h, --help      Show this help message')
     console.log('')
     console.log('This script will:')
     console.log('  1. Download latest PlantUML JAR from GitHub')
-    console.log('  2. Build Wasm module using Bytecoder')
     console.log('')
     process.exit(0)
+  }
+  
+  // Remove --skip-wasm option (no longer needed)
+  if (args.indexOf('--skip-wasm') !== -1) {
+    console.log('Note: --skip-wasm option is deprecated (Wasm build removed)')
   }
 
   buildAll(options, function (err) {

@@ -1,12 +1,12 @@
 # node-plantuml-2
 
-> **Pure Node.js PlantUML Renderer - No Java Required!**
+> **Node.js PlantUML Renderer with Java Backend**
 
 [![npm version](https://img.shields.io/npm/v/node-plantuml-2)](https://www.npmjs.com/package/node-plantuml-2)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D12-green.svg)](https://nodejs.org/)
 
-A powerful Node.js module and CLI for running [PlantUML](http://plantuml.sourceforge.net/) with **pure Node.js support**. This project is a fork and enhancement of [node-plantuml](https://github.com/markushedvall/node-plantuml), featuring WebAssembly-based execution that eliminates the need for Java runtime.
+A powerful Node.js module and CLI for running [PlantUML](http://plantuml.sourceforge.net/). This project is a fork and enhancement of [node-plantuml](https://github.com/markushedvall/node-plantuml), providing improved performance with Nailgun optimization for faster Java startup.
 
 <div align="center">
 
@@ -20,12 +20,11 @@ A powerful Node.js module and CLI for running [PlantUML](http://plantuml.sourcef
 
 ## ✨ Key Features
 
-- 🚀 **Pure Node.js Environment** - No Java installation required! Uses pre-compiled WebAssembly module
-- 📦 **Zero Configuration** - Just `npm install` and start using
+- 🚀 **Optimized Java Execution** - Uses Nailgun for faster Java startup, keeping JVM resident in memory
+- 📦 **Easy Setup** - Just `npm install` and ensure Java is installed
 - 🎨 **Multiple Output Formats** - Support for PNG, SVG, EPS, ASCII, and Unicode text
 - 🌏 **Multi-language Support** - Perfect rendering for Chinese, Japanese, Korean, and other CJK characters with automatic font detection
-- ⚡ **Fast Startup** - WebAssembly execution is faster than JVM
-- 🔄 **Automatic Fallback** - Falls back to Java executor if Wasm is unavailable
+- ⚡ **Fast Performance** - Nailgun optimization reduces Java startup overhead
 - 📝 **CLI & API** - Both command-line interface and programmatic API
 - 🎯 **Based on PlantUML** - Full compatibility with PlantUML syntax
 
@@ -33,17 +32,54 @@ A powerful Node.js module and CLI for running [PlantUML](http://plantuml.sourcef
 
 ## 📦 Installation
 
+### Quick Install (Recommended)
+
 ```bash
 npm install node-plantuml-2
 ```
 
-**That's it!** No Java, no configuration, no build steps required.
+**That's it!** The package automatically installs a bundled, minimal JRE for your platform. **No Java installation required!** 🎉
+
+The bundled JRE is automatically installed via platform-specific optional dependencies:
+- **Windows x64**: `@node-plantuml-2/jre-win32-x64`
+- **macOS ARM64**: `@node-plantuml-2/jre-darwin-arm64`
+- **macOS x64**: `@node-plantuml-2/jre-darwin-x64`
+- **Linux x64**: `@node-plantuml-2/jre-linux-x64`
+
+Only the JRE matching your platform will be installed, keeping the installation lightweight.
 
 For global CLI installation:
 
 ```bash
 npm install node-plantuml-2 -g
 ```
+
+### Java Requirements
+
+This library uses Java to run PlantUML. **Java is automatically provided** via bundled JRE packages - no manual installation needed!
+
+**How it works:**
+
+1. **Bundled JRE** (Primary) - Automatically installed for your platform via `optionalDependencies`
+   - Lightweight minimal JRE built with `jlink`
+   - Only ~40-60MB per platform
+   - Works out of the box, no configuration needed
+
+2. **System Java** (Fallback) - If bundled JRE is unavailable, uses system Java if present
+   - Checks `JAVA_HOME` environment variable
+   - Checks system PATH for `java` command
+
+3. **Custom Java** (Optional) - Specify custom Java path via `options.javaPath`
+   ```javascript
+   plantuml.generate(code, { javaPath: '/custom/path/to/java' })
+   ```
+
+**No manual Java installation required!** The bundled JRE works out of the box on supported platforms:
+- ✅ Windows x64
+- ✅ macOS x64 and ARM64
+- ✅ Linux x64
+
+If you prefer to use system Java instead, ensure **Java Runtime Environment (JRE) 8+** is installed, and the bundled JRE will be automatically skipped.
 
 ---
 
@@ -427,29 +463,27 @@ app.get('/svg/:uml', (req, res) => {
 app.listen(8080)
 ```
 
-### Force Java Executor (Optional)
-
-If you prefer to use Java executor (requires Java installed):
-
-```bash
-PLANTUML_USE_JAVA=true node your-script.js
-```
-
 ---
 
 ## 🏗️ Architecture
 
-This project uses a **hybrid execution model**:
+This project uses **Java execution** with automatic JRE bundling and optimization:
 
-1. **Primary: WebAssembly Executor** (Pure Node.js)
-   - Pre-compiled Wasm module included in npm package
-   - Fast startup, low memory footprint
-   - No Java required
+1. **Bundled JRE** (Automatic)
+   - Lightweight minimal JRE (~40-60MB) installed automatically via `optionalDependencies`
+   - Built with `jlink` for optimal size
+   - Platform-specific packages ensure only relevant JRE is installed
+   - **No manual Java installation required!**
 
-2. **Fallback: Java Executor** (Optional)
-   - Automatic fallback if Wasm unavailable
-   - Requires Java runtime
-   - Full compatibility with original node-plantuml
+2. **Java Executor** (Primary)
+   - Uses bundled JRE or system Java to execute `java -jar plantuml.jar`
+   - Full compatibility with PlantUML features
+   - Automatic Java path resolution with fallback strategy
+
+3. **Nailgun Optimization** (Optional, for performance)
+   - Keeps JVM resident in memory for faster startup
+   - Use `plantumlExecutor.useNailgun()` to enable
+   - Reduces startup overhead significantly
 
 ### Execution Flow
 
@@ -458,9 +492,19 @@ User Code
     ↓
 plantuml.generate()
     ↓
-Check Wasm Availability
-    ├─ Available → Use Wasm Executor ✅ (Pure Node)
-    └─ Unavailable → Use Java Executor (Fallback)
+plantumlExecutor.exec()
+    ↓
+Java Path Resolution (Priority Order)
+    ├─ options.javaPath (User specified)
+    ├─ Bundled JRE (Auto-installed)
+    ├─ JAVA_HOME (System env var)
+    └─ System PATH java
+    ↓
+Check if Nailgun is running
+    ├─ Running → Use Nailgun (faster)
+    └─ Not running → Use spawn('java', ...)
+    ↓
+Execute PlantUML JAR
     ↓
 Generate Diagram
     ↓
@@ -471,9 +515,16 @@ Return Stream
 
 ## 📋 System Requirements
 
-- **Node.js 12+** (recommended 20+ for stable WASI support)
-- **No Java required** ✅ (Wasm executor works out of the box)
+- **Node.js 12+**
+- **Java Runtime Environment (JRE) 8+** - **Automatically provided via bundled JRE packages** (no installation needed!)
 - **Graphviz** (optional, for advanced diagram types)
+
+**Supported Platforms:**
+- ✅ Windows x64
+- ✅ macOS x64 and ARM64 (Apple Silicon)
+- ✅ Linux x64
+
+**Note**: Java is automatically bundled via platform-specific npm packages - **no manual Java installation required!** The bundled minimal JRE is lightweight (~40-60MB) and works out of the box.
 
 ---
 
@@ -495,13 +546,13 @@ npm run test:batch:png
 
 ## 📝 Changelog
 
-### v0.9.0
+### v1.0.2
 
-- ✨ **Pure Node.js Support** - WebAssembly-based execution, no Java required
 - 🌏 **Multi-language Support** - Perfect rendering for Chinese, Japanese, Korean with automatic font detection
 - 📦 **Auto-update** - Automatic PlantUML JAR updates from GitHub Releases
 - 🎨 **Multiple Formats** - PNG, SVG, EPS, ASCII, Unicode support
-- 🔄 **Smart Fallback** - Automatic fallback to Java if Wasm unavailable
+- ⚡ **Performance Optimization** - Nailgun support for faster Java startup
+- 🧹 **Code Cleanup** - Removed non-functional Wasm implementation (see docs/WASM_BUILD_LIMITATIONS.md)
 
 ---
 
@@ -523,7 +574,6 @@ This project is based on:
 
 - **[PlantUML](http://plantuml.sourceforge.net/)** - The powerful diagramming tool
 - **[node-plantuml](https://github.com/markushedvall/node-plantuml)** - Original Node.js wrapper by Markus Hedvall
-- **[Bytecoder](https://github.com/mirkosertic/Bytecoder)** - Java to WebAssembly compiler
 
 Special thanks to the PlantUML community and all contributors!
 
@@ -545,40 +595,77 @@ Special thanks to the PlantUML community and all contributors!
 
 # node-plantuml-2
 
-> **纯 Node.js PlantUML 渲染器 - 无需 Java！**
+> **Node.js PlantUML 渲染器 - 基于 Java 后端**
 
 [![npm version](https://img.shields.io/npm/v/node-plantuml-2)](https://www.npmjs.com/package/node-plantuml-2)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D12-green.svg)](https://nodejs.org/)
 
-一个强大的 Node.js 模块和 CLI，用于运行 [PlantUML](http://plantuml.sourceforge.net/)，支持**纯 Node.js 环境**。本项目基于 [node-plantuml](https://github.com/markushedvall/node-plantuml) Fork 并增强，采用 WebAssembly 执行，无需 Java 运行时。
+一个强大的 Node.js 模块和 CLI，用于运行 [PlantUML](http://plantuml.sourceforge.net/)。本项目基于 [node-plantuml](https://github.com/markushedvall/node-plantuml) Fork 并增强，通过 Nailgun 优化提供更快的 Java 启动性能。
 
 ## ✨ 核心特性
 
-- 🚀 **纯 Node.js 环境** - 无需安装 Java！使用预编译的 WebAssembly 模块
-- 📦 **零配置** - 只需 `npm install` 即可使用
+- 📦 **无需安装 Java** - 通过特定平台包自动安装捆绑的轻量级 JRE
+- 🚀 **优化的 Java 执行** - 使用 Nailgun 加速 Java 启动，保持 JVM 常驻内存
+- 🎯 **易于安装** - 只需 `npm install` - 无需手动配置 Java！
 - 🎨 **多种输出格式** - 支持 PNG、SVG、EPS、ASCII 和 Unicode 文本
 - 🌏 **多语言支持** - 完美支持中文、日文、韩文等多种 CJK 字符渲染，自动字体检测和配置
-- ⚡ **快速启动** - WebAssembly 执行比 JVM 更快
-- 🔄 **自动降级** - Wasm 不可用时自动降级到 Java 执行器
+- ⚡ **高性能** - Nailgun 优化减少 Java 启动开销
 - 📝 **CLI 和 API** - 同时提供命令行界面和编程 API
-- 🎯 **基于 PlantUML** - 完全兼容 PlantUML 语法
+- 🏗️ **基于 PlantUML** - 完全兼容 PlantUML 语法
 
 ---
 
 ## 📦 安装
 
+### 快速安装（推荐）
+
 ```bash
 npm install node-plantuml-2
 ```
 
-**就这么简单！** 无需 Java，无需配置，无需构建步骤。
+**就这么简单！** 该包会自动为您的平台安装捆绑的轻量级 JRE。**无需安装 Java！** 🎉
+
+捆绑的 JRE 通过特定平台的可选依赖自动安装：
+- **Windows x64**: `@node-plantuml-2/jre-win32-x64`
+- **macOS ARM64**: `@node-plantuml-2/jre-darwin-arm64`
+- **macOS x64**: `@node-plantuml-2/jre-darwin-x64`
+- **Linux x64**: `@node-plantuml-2/jre-linux-x64`
+
+只会安装与您平台匹配的 JRE，保持安装轻量。
 
 全局安装 CLI：
 
 ```bash
 npm install node-plantuml-2 -g
 ```
+
+### Java 要求
+
+本库使用 Java 来运行 PlantUML。**Java 会自动提供**，通过捆绑的 JRE 包 - 无需手动安装！
+
+**工作原理：**
+
+1. **捆绑的 JRE**（主要方式）- 通过 `optionalDependencies` 自动为您的平台安装
+   - 使用 `jlink` 构建的轻量级最小 JRE
+   - 每个平台仅约 40-60MB
+   - 开箱即用，无需配置
+
+2. **系统 Java**（后备方案）- 如果捆绑的 JRE 不可用，会使用系统 Java（如果存在）
+   - 检查 `JAVA_HOME` 环境变量
+   - 检查系统 PATH 中的 `java` 命令
+
+3. **自定义 Java**（可选）- 通过 `options.javaPath` 指定自定义 Java 路径
+   ```javascript
+   plantuml.generate(code, { javaPath: '/custom/path/to/java' })
+   ```
+
+**无需手动安装 Java！** 捆绑的 JRE 在支持的平台上开箱即用：
+- ✅ Windows x64
+- ✅ macOS x64 和 ARM64
+- ✅ Linux x64
+
+如果您更喜欢使用系统 Java，只需确保已安装 **Java Runtime Environment (JRE) 8+**，捆绑的 JRE 将自动跳过。
 
 ---
 
@@ -960,17 +1047,23 @@ PLANTUML_USE_JAVA=true node your-script.js
 
 ## 🏗️ 架构
 
-本项目采用**混合执行模型**：
+本项目使用**Java 执行**，并自动捆绑 JRE 和进行优化：
 
-1. **主要：WebAssembly 执行器**（纯 Node.js）
-   - npm 包中包含预编译的 Wasm 模块
-   - 快速启动，低内存占用
-   - 无需 Java
+1. **捆绑的 JRE**（自动）
+   - 轻量级最小 JRE（约 40-60MB）通过 `optionalDependencies` 自动安装
+   - 使用 `jlink` 构建以获得最佳体积
+   - 特定平台的包确保只安装相关的 JRE
+   - **无需手动安装 Java！**
 
-2. **降级：Java 执行器**（可选）
-   - Wasm 不可用时自动降级
-   - 需要 Java 运行时
-   - 与原始 node-plantuml 完全兼容
+2. **Java 执行器**（主要）
+   - 使用捆绑的 JRE 或系统 Java 执行 `java -jar plantuml.jar`
+   - 完全支持 PlantUML 的所有功能
+   - 自动 Java 路径解析，带后备策略
+
+3. **Nailgun 优化**（可选，用于性能提升）
+   - 保持 JVM 常驻内存以加速启动
+   - 使用 `plantumlExecutor.useNailgun()` 启用
+   - 显著减少启动开销
 
 ### 执行流程
 
@@ -979,9 +1072,19 @@ PLANTUML_USE_JAVA=true node your-script.js
     ↓
 plantuml.generate()
     ↓
-检查 Wasm 可用性
-    ├─ 可用 → 使用 Wasm 执行器 ✅ (纯 Node)
-    └─ 不可用 → 使用 Java 执行器 (降级)
+plantumlExecutor.exec()
+    ↓
+Java 路径解析（优先级顺序）
+    ├─ options.javaPath（用户指定）
+    ├─ 捆绑的 JRE（自动安装）
+    ├─ JAVA_HOME（系统环境变量）
+    └─ 系统 PATH 中的 java
+    ↓
+检查 Nailgun 是否运行
+    ├─ 运行中 → 使用 Nailgun（更快）
+    └─ 未运行 → 使用 spawn('java', ...)
+    ↓
+执行 PlantUML JAR
     ↓
 生成图表
     ↓
@@ -992,9 +1095,16 @@ plantuml.generate()
 
 ## 📋 系统要求
 
-- **Node.js 12+**（推荐 20+ 以获得稳定的 WASI 支持）
-- **无需 Java** ✅（Wasm 执行器开箱即用）
+- **Node.js 12+**
+- **Java Runtime Environment (JRE) 8+** - **通过捆绑的 JRE 包自动提供**（无需安装！）
 - **Graphviz**（可选，用于高级图表类型）
+
+**支持的平台：**
+- ✅ Windows x64
+- ✅ macOS x64 和 ARM64 (Apple Silicon)
+- ✅ Linux x64
+
+**注意**：Java 通过特定平台的 npm 包自动捆绑 - **无需手动安装 Java！** 捆绑的轻量级 JRE 体积小（约 40-60MB），开箱即用。
 
 ---
 
@@ -1016,13 +1126,13 @@ npm run test:batch:png
 
 ## 📝 更新日志
 
-### v0.9.0
+### v1.0.2
 
-- ✨ **纯 Node.js 支持** - 基于 WebAssembly 的执行，无需 Java
 - 🌏 **多语言支持** - 完美支持中文、日文、韩文等多种语言，自动字体检测
 - 📦 **自动更新** - 从 GitHub Releases 自动更新 PlantUML JAR
 - 🎨 **多种格式** - PNG、SVG、EPS、ASCII、Unicode 支持
-- 🔄 **智能降级** - Wasm 不可用时自动降级到 Java
+- ⚡ **性能优化** - Nailgun 支持以加速 Java 启动
+- 🧹 **代码清理** - 移除了不可用的 Wasm 实现（参见 docs/WASM_BUILD_LIMITATIONS.md）
 
 ---
 
@@ -1044,7 +1154,6 @@ MIT License
 
 - **[PlantUML](http://plantuml.sourceforge.net/)** - 强大的图表工具
 - **[node-plantuml](https://github.com/markushedvall/node-plantuml)** - Markus Hedvall 的原始 Node.js 包装器
-- **[Bytecoder](https://github.com/mirkosertic/Bytecoder)** - Java 到 WebAssembly 编译器
 
 特别感谢 PlantUML 社区和所有贡献者！
 
