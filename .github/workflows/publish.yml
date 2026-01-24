@@ -451,8 +451,184 @@ jobs:
         run: |
           echo "ℹ️  Version ${{ needs.prepare.outputs.version }} already exists for ${{ matrix.package }}, skipping publish"
 
+  build-and-publish-graphviz:
+    needs: prepare
+    strategy:
+      matrix:
+        include:
+          - platform: linux
+            arch: x64
+            runner: ubuntu-latest
+            package: '@node-plantuml-2/graphviz-linux-x64'
+          - platform: win32
+            arch: x64
+            runner: windows-latest
+            package: '@node-plantuml-2/graphviz-win32-x64'
+          - platform: darwin
+            arch: arm64
+            runner: macos-14
+            package: '@node-plantuml-2/graphviz-darwin-arm64'
+          - platform: darwin
+            arch: x64
+            runner: macos-14
+            package: '@node-plantuml-2/graphviz-darwin-x64'
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install Graphviz (for building package)
+        shell: bash
+        run: |
+          echo "📦 Installing Graphviz for package building..."
+          if [ "${{ matrix.platform }}" = "darwin" ]; then
+            # macOS: Install via Homebrew
+            if ! command -v brew &> /dev/null; then
+              echo "Installing Homebrew..."
+              /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+            fi
+            if [ -f /opt/homebrew/bin/brew ]; then
+              export PATH="/opt/homebrew/bin:$PATH"
+            fi
+            brew install graphviz || brew upgrade graphviz
+          elif [ "${{ matrix.platform }}" = "linux" ]; then
+            # Linux: Install via apt-get
+            sudo apt-get update
+            sudo apt-get install -y graphviz
+          elif [ "${{ matrix.platform }}" = "win32" ]; then
+            # Windows: Try Chocolatey or Winget
+            if command -v choco &> /dev/null; then
+              choco install graphviz -y
+            elif command -v winget &> /dev/null; then
+              winget install Graphviz.Graphviz --accept-package-agreements --accept-source-agreements
+            else
+              echo "⚠️  Please install Graphviz manually on Windows"
+            fi
+          fi
+
+      - name: Verify Graphviz installation
+        shell: bash
+        run: |
+          echo "Verifying Graphviz installation..."
+          if [ "${{ matrix.platform }}" = "win32" ]; then
+            where dot || echo "dot not found"
+            dot -V || echo "dot command failed"
+          else
+            which dot || echo "dot not found"
+            dot -V || echo "dot command failed"
+          fi
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Create Graphviz package directory
+        shell: bash
+        run: |
+          mkdir -p runtimes/@node-plantuml-2/graphviz-${{ matrix.platform }}-${{ matrix.arch }}
+
+      - name: Create package.json for Graphviz runtime
+        shell: bash
+        run: |
+          echo "📝 Creating package.json for ${{ matrix.package }}..."
+          node scripts/create-graphviz-package-json.js ${{ matrix.platform }} ${{ matrix.arch }} ${{ needs.prepare.outputs.version }}
+
+      - name: Build Graphviz package
+        shell: bash
+        run: |
+          echo "🔨 Building Graphviz package for ${{ matrix.platform }} ${{ matrix.arch }}..."
+          node scripts/build-graphviz.js ${{ matrix.platform }} ${{ matrix.arch }}
+
+      - name: Verify Graphviz package
+        shell: bash
+        run: |
+          if [ "${{ matrix.platform }}" = "win32" ]; then
+            DOT_EXE="runtimes/@node-plantuml-2/graphviz-${{ matrix.platform }}-${{ matrix.arch }}/graphviz/bin/dot.exe"
+          else
+            DOT_EXE="runtimes/@node-plantuml-2/graphviz-${{ matrix.platform }}-${{ matrix.arch }}/graphviz/bin/dot"
+          fi
+          
+          if [ ! -f "$DOT_EXE" ]; then
+            echo "❌ Error: Graphviz dot executable not found at $DOT_EXE"
+            exit 1
+          fi
+          
+          echo "✓ Graphviz dot executable found"
+          
+          # Verify dot works
+          if [ "${{ matrix.platform }}" = "win32" ]; then
+            "$DOT_EXE" -V
+          else
+            chmod +x "$DOT_EXE"
+            "$DOT_EXE" -V
+          fi
+          
+          echo "✅ Graphviz package verification passed"
+
+      - name: Verify NPM authentication
+        shell: bash
+        run: |
+          echo "🔍 Verifying npm authentication..."
+          npm whoami || {
+            echo "❌ Error: Not authenticated to npm"
+            exit 1
+          }
+          echo "✅ Successfully authenticated to npm"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Check if Graphviz package version exists
+        id: check-version-graphviz
+        shell: bash
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          if npm view ${{ matrix.package }}@$VERSION version > /dev/null 2>&1; then
+            echo "⚠️  Version $VERSION already exists for ${{ matrix.package }}"
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "✅ Version $VERSION is available for ${{ matrix.package }}"
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        continue-on-error: true
+
+      - name: Publish Graphviz runtime package
+        if: steps.check-version-graphviz.outputs.exists != 'true'
+        shell: bash
+        run: |
+          echo "📦 Publishing ${{ matrix.package }}@${{ needs.prepare.outputs.version }}..."
+          cd runtimes/@node-plantuml-2/graphviz-${{ matrix.platform }}-${{ matrix.arch }}
+          npm publish --access public
+          echo "✅ Published ${{ matrix.package }}@${{ needs.prepare.outputs.version }}"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish Graphviz runtime package (skip if exists)
+        if: steps.check-version-graphviz.outputs.exists == 'true'
+        shell: bash
+        run: |
+          echo "ℹ️  Version ${{ needs.prepare.outputs.version }} already exists for ${{ matrix.package }}, skipping publish"
+
   publish-main:
-    needs: [prepare, build-and-publish-runtimes]
+    needs: [prepare, build-and-publish-runtimes, build-and-publish-graphviz]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -530,7 +706,11 @@ jobs:
             pkg.optionalDependencies = {
               '@node-plantuml-2/jre-win32-x64': '^' + version,
               '@node-plantuml-2/jre-darwin-arm64': '^' + version,
-              '@node-plantuml-2/jre-linux-x64': '^' + version
+              '@node-plantuml-2/jre-linux-x64': '^' + version,
+              '@node-plantuml-2/graphviz-win32-x64': '^' + version,
+              '@node-plantuml-2/graphviz-darwin-arm64': '^' + version,
+              '@node-plantuml-2/graphviz-darwin-x64': '^' + version,
+              '@node-plantuml-2/graphviz-linux-x64': '^' + version
             };
             
             fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');

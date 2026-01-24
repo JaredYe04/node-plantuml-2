@@ -28,7 +28,11 @@
   "optionalDependencies": {
     "@node-plantuml-2/jre-win32-x64": "^1.0.4",
     "@node-plantuml-2/jre-darwin-arm64": "^1.0.4",
-    "@node-plantuml-2/jre-linux-x64": "^1.0.4"
+    "@node-plantuml-2/jre-linux-x64": "^1.0.4",
+    "@node-plantuml-2/graphviz-win32-x64": "^1.0.4",
+    "@node-plantuml-2/graphviz-darwin-arm64": "^1.0.4",
+    "@node-plantuml-2/graphviz-darwin-x64": "^1.0.4",
+    "@node-plantuml-2/graphviz-linux-x64": "^1.0.4"
   },
   "devDependencies": {
     "chai": "^4.x",
@@ -49,12 +53,16 @@
   "scripts": {
     "prepublish": "node scripts/get-plantuml-jar.js --latest || echo 'JAR download failed, continuing...'",
     "postinstall": "node scripts/get-vizjs.js",
+    "install:graphviz": "node scripts/install-graphviz.js",
     "test": "standard && node test/fixtures/prepare.js && mocha",
     "test:batch": "node test/batch-convert-test.js",
     "test:batch:svg": "node test/batch-convert-test.js --svg",
     "test:batch:png": "node test/batch-convert-test.js --png",
+    "test:integration": "node test/test-integration-full.js",
     "build": "node nail/build.js",
-    "build:all": "node scripts/build-all.js"
+    "build:all": "node scripts/build-all.js",
+    "test:graphviz": "node scripts/test-graphviz-build.js",
+    "test:graphviz:build": "node scripts/test-graphviz-build.js"
   },
   "bin": {
     "puml": "index.js"

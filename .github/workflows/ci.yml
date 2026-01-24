@@ -48,6 +48,85 @@ jobs:
       - name: Run tests
         run: npm test || echo "Tests failed, but continuing..."
 
+      - name: Run comprehensive integration tests
+        run: node test/test-integration-full.js
+
+  test-windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install Graphviz (Chocolatey)
+        shell: powershell
+        run: |
+          Write-Host "📦 Installing Graphviz via Chocolatey..."
+          if (Get-Command choco -ErrorAction SilentlyContinue) {
+            choco install graphviz -y
+          } elseif (Get-Command winget -ErrorAction SilentlyContinue) {
+            winget install Graphviz.Graphviz --accept-package-agreements --accept-source-agreements
+          } else {
+            Write-Host "⚠️  Neither Chocolatey nor Winget found, Graphviz may not be available"
+          }
+
+      - name: Verify Graphviz installation
+        shell: powershell
+        run: |
+          Write-Host "Verifying Graphviz installation..."
+          $dotPath = Get-Command dot -ErrorAction SilentlyContinue
+          if ($dotPath) {
+            Write-Host "✓ Graphviz found at: $($dotPath.Source)"
+            & $dotPath.Source -V
+          } else {
+            Write-Host "⚠️  Graphviz not found in PATH"
+          }
+
+      - name: Install dependencies
+        run: |
+          if (Test-Path package-lock.json) {
+            npm ci
+          } else {
+            npm install
+          }
+
+      - name: Download PlantUML JAR
+        run: npm run build:all:jar-only || echo "JAR download failed, continuing..."
+
+      - name: Test JRE detection
+        shell: powershell
+        run: |
+          node -e "var javaResolver = require('./lib/java-resolver'); var javaPath = javaResolver.resolveJavaExecutable({}); console.log('JRE path:', javaPath || 'NOT FOUND'); if (!javaPath) { process.exit(1); }"
+
+      - name: Test Graphviz detection
+        shell: powershell
+        run: |
+          node -e "var dotResolver = require('./lib/dot-resolver'); var dotPath = dotResolver.resolveDotExecutable({ dotPath: null }); console.log('Graphviz path:', dotPath || 'NOT FOUND'); if (!dotPath) { process.exit(1); }"
+
+      - name: Test PlantUML testdot
+        shell: powershell
+        run: |
+          node -e "var plantuml = require('./lib/node-plantuml'); plantuml.testdot(function(isOk) { console.log('testdot result:', isOk ? 'OK' : 'FAILED'); process.exit(isOk ? 0 : 1); });"
+
+      - name: Run linting
+        run: npx standard --fix || echo "Linting issues found"
+
+      - name: Run tests
+        run: npm test || echo "Tests failed, but continuing..."
+
+      - name: Run comprehensive integration tests
+        run: node test/test-integration-full.js
+
   test-mac:
     runs-on: macos-latest
     strategy:
@@ -239,4 +318,7 @@ jobs:
 
       - name: Run tests
         run: npm test || echo "Tests failed, but continuing..."
+
+      - name: Run comprehensive integration tests
+        run: node test/test-integration-full.js
 
