@@ -196,13 +196,15 @@ function buildGraphviz () {
     
     // Copy bin directory
     var destBinDir = path.join(graphvizDir, 'bin')
+    var destDotPath = path.join(destBinDir, path.basename(dotPath))
+    
     if (fs.existsSync(binDir)) {
       console.log('Copying bin directory...')
+      visitedPaths.clear() // Reset visited paths for each directory
       copyRecursive(binDir, destBinDir)
       console.log('✓ Copied bin directory')
       
       // Make dot executable on Unix
-      var destDotPath = path.join(destBinDir, path.basename(dotPath))
       if (PLATFORM !== 'win32' && fs.existsSync(destDotPath)) {
         fs.chmodSync(destDotPath, 0o755)
       }
@@ -212,7 +214,6 @@ function buildGraphviz () {
       if (!fs.existsSync(destBinDir)) {
         fs.mkdirSync(destBinDir, { recursive: true })
       }
-      var destDotPath = path.join(destBinDir, path.basename(dotPath))
       fs.copyFileSync(dotPath, destDotPath)
       if (PLATFORM !== 'win32') {
         fs.chmodSync(destDotPath, 0o755)

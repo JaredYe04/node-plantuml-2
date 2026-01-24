@@ -47,7 +47,7 @@ try {
     // Verify JRE works
     var childProcess = require('child_process')
     try {
-      var version = childProcess.execSync('"' + javaPath + '" -version', {
+      childProcess.execSync('"' + javaPath + '" -version', {
         encoding: 'utf-8',
         stdio: ['ignore', 'pipe', 'pipe']
       })
@@ -66,6 +66,7 @@ console.log('')
 // Test 2: Graphviz Detection
 console.log('Test 2: Graphviz Detection')
 console.log('---')
+var childProcess = require('child_process')
 try {
   var dotPath = dotResolver.resolveDotExecutable({ dotPath: null })
   if (dotPath) {
@@ -80,9 +81,8 @@ try {
     }
     
     // Verify Graphviz works
-    var childProcess = require('child_process')
     try {
-      var version = childProcess.execSync('"' + dotPath + '" -V', {
+      childProcess.execSync('"' + dotPath + '" -V', {
         encoding: 'utf-8',
         stdio: ['ignore', 'pipe', 'pipe']
       })
