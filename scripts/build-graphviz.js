@@ -121,7 +121,30 @@ function copyRecursive (src, dest) {
     var stat = fs.lstatSync(src)
 
     if (stat.isSymbolicLink()) {
-      // Copy the symlink itself, don't follow it
+      // For Graphviz dot executable, follow the symlink and copy the actual file
+      // Otherwise, just copy the symlink
+      var basename = path.basename(src)
+      if (basename === 'dot' || basename === 'dot.exe') {
+        try {
+          // Follow symlink and copy the actual file
+          var resolvedPath = fs.realpathSync(src)
+          if (fs.existsSync(resolvedPath)) {
+            var resolvedStat = fs.statSync(resolvedPath)
+            if (resolvedStat.isFile()) {
+              var destDir = path.dirname(dest)
+              if (!fs.existsSync(destDir)) {
+                fs.mkdirSync(destDir, { recursive: true })
+              }
+              fs.copyFileSync(resolvedPath, dest)
+              console.log('  Copied dot executable (resolved symlink):', resolvedPath, '->', dest)
+              return
+            }
+          }
+        } catch (err) {
+          console.log('  Warning: Could not resolve symlink for dot, copying symlink instead:', err.message)
+        }
+      }
+      // For other symlinks, copy the symlink itself
       var linkTarget = fs.readlinkSync(src)
       if (!fs.existsSync(dest)) {
         fs.symlinkSync(linkTarget, dest)
