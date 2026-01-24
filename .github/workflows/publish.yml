@@ -555,18 +555,57 @@ jobs:
         run: |
           echo "🔨 Building Graphviz package for ${{ matrix.platform }} ${{ matrix.arch }}..."
           node scripts/build-graphviz.js ${{ matrix.platform }} ${{ matrix.arch }}
+          echo "Build step completed with exit code: $?"
+
+      - name: List build output directory
+        shell: bash
+        run: |
+          echo "📁 Listing build output directory..."
+          PACKAGE_DIR="runtimes/@node-plantuml-2/graphviz-${{ matrix.platform }}-${{ matrix.arch }}"
+          if [ -d "$PACKAGE_DIR" ]; then
+            echo "Package directory exists: $PACKAGE_DIR"
+            ls -la "$PACKAGE_DIR" || echo "Failed to list package directory"
+            if [ -d "$PACKAGE_DIR/graphviz" ]; then
+              echo "Graphviz directory exists"
+              ls -la "$PACKAGE_DIR/graphviz" || echo "Failed to list graphviz directory"
+              if [ -d "$PACKAGE_DIR/graphviz/bin" ]; then
+                echo "Bin directory exists"
+                ls -la "$PACKAGE_DIR/graphviz/bin" || echo "Failed to list bin directory"
+              else
+                echo "Bin directory does not exist"
+              fi
+            else
+              echo "Graphviz directory does not exist"
+            fi
+          else
+            echo "Package directory does not exist: $PACKAGE_DIR"
+          fi
 
       - name: Verify Graphviz package
         shell: bash
         run: |
+          PACKAGE_DIR="runtimes/@node-plantuml-2/graphviz-${{ matrix.platform }}-${{ matrix.arch }}"
           if [ "${{ matrix.platform }}" = "win32" ]; then
-            DOT_EXE="runtimes/@node-plantuml-2/graphviz-${{ matrix.platform }}-${{ matrix.arch }}/graphviz/bin/dot.exe"
+            DOT_EXE="$PACKAGE_DIR/graphviz/bin/dot.exe"
           else
-            DOT_EXE="runtimes/@node-plantuml-2/graphviz-${{ matrix.platform }}-${{ matrix.arch }}/graphviz/bin/dot"
+            DOT_EXE="$PACKAGE_DIR/graphviz/bin/dot"
           fi
+          
+          echo "Checking for dot executable at: $DOT_EXE"
           
           if [ ! -f "$DOT_EXE" ]; then
             echo "❌ Error: Graphviz dot executable not found at $DOT_EXE"
+            echo "Current directory: $(pwd)"
+            echo "Package directory contents:"
+            ls -la "$PACKAGE_DIR" || echo "Package directory does not exist"
+            if [ -d "$PACKAGE_DIR/graphviz" ]; then
+              echo "Graphviz directory contents:"
+              ls -la "$PACKAGE_DIR/graphviz" || true
+              if [ -d "$PACKAGE_DIR/graphviz/bin" ]; then
+                echo "Bin directory contents:"
+                ls -la "$PACKAGE_DIR/graphviz/bin" || true
+              fi
+            fi
             exit 1
           fi
           
