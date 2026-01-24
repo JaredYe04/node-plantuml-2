@@ -136,70 +136,101 @@ jobs:
             }
           "
 
-      - name: Test PlantUML testdot command
+      - name: Test PlantUML testdot command directly
         run: |
-          echo "🧪 Testing PlantUML testdot command..."
+          echo "🧪 Testing PlantUML testdot command directly..."
           node -e "
-            var plantuml = require('./lib/node-plantuml');
+            var childProcess = require('child_process');
+            var path = require('path');
             var dotResolver = require('./lib/dot-resolver');
+            var javaResolver = require('./lib/java-resolver');
+            var fs = require('fs');
             
             console.log('');
-            console.log('=== PlantUML testdot Test ===');
+            console.log('=== Direct PlantUML testdot Test ===');
             
-            // First check if dot is detected
-            var detected = dotResolver.resolveDotExecutable({ dotPath: null });
-            console.log('Detected dot path:', detected || 'NOT FOUND');
+            // Get Java and dot paths
+            var javaPath = javaResolver.resolveJavaExecutable({});
+            var dotPath = dotResolver.resolveDotExecutable({ dotPath: null });
+            var plantumlJar = path.join(__dirname, 'vendor/plantuml.jar');
+            
+            console.log('Java path:', javaPath || 'NOT FOUND');
+            console.log('Dot path:', dotPath || 'NOT FOUND');
+            console.log('PlantUML JAR:', plantumlJar);
+            console.log('JAR exists:', fs.existsSync(plantumlJar));
             console.log('');
             
-            // Test testdot with full output capture
-            var result = plantuml.testdot(function(isOk) {
-              console.log('testdot result:', isOk ? 'OK ✓' : 'FAILED ✗');
+            if (!javaPath || !fs.existsSync(plantumlJar)) {
+              console.log('❌ Missing Java or PlantUML JAR');
+              process.exit(1);
+            }
+            
+            // Build command
+            var args = [
+              '-Dplantuml.include.path=' + process.cwd(),
+              '-Djava.awt.headless=true',
+              '-Dfile.encoding=UTF-8',
+              '-jar', plantumlJar,
+              '-testdot'
+            ];
+            
+            if (dotPath) {
+              args.push('-graphvizdot');
+              args.push(dotPath);
+            }
+            
+            console.log('Command:', javaPath, args.join(' '));
+            console.log('');
+            
+            // Run command
+            var child = childProcess.spawn(javaPath, args, {
+              stdio: 'pipe'
+            });
+            
+            var stdoutChunks = [];
+            var stderrChunks = [];
+            
+            child.stdout.on('data', function(chunk) {
+              stdoutChunks.push(chunk);
+              process.stdout.write(chunk);
+            });
+            
+            child.stderr.on('data', function(chunk) {
+              stderrChunks.push(chunk);
+              process.stderr.write(chunk);
+            });
+            
+            child.on('close', function(code) {
               console.log('');
+              console.log('Exit code:', code);
+              
+              var stdoutData = Buffer.concat(stdoutChunks).toString();
+              var stderrData = Buffer.concat(stderrChunks).toString();
+              
+              console.log('');
+              console.log('=== Full stdout ===');
+              console.log(stdoutData || '(empty)');
+              console.log('');
+              console.log('=== Full stderr ===');
+              console.log(stderrData || '(empty)');
+              
+              var successMsg = 'Installation seems OK. File generation OK';
+              var isOk = stdoutData.indexOf(successMsg) !== -1 || stderrData.indexOf(successMsg) !== -1;
               
               if (isOk) {
-                console.log('✅ Graphviz is working correctly!');
+                console.log('');
+                console.log('✅ Graphviz test passed!');
                 process.exit(0);
               } else {
+                console.log('');
                 console.log('❌ Graphviz test failed');
-                if (!detected) {
-                  console.log('  Reason: dot executable not found');
-                } else {
-                  console.log('  Reason: dot executable found but test failed');
-                  console.log('  Detected path:', detected);
-                  console.log('  This might indicate a Graphviz installation issue');
-                }
                 process.exit(1);
               }
             });
             
-            // Capture stderr for debugging
-            var stderrChunks = [];
-            if (result.err) {
-              result.err.on('data', function(chunk) {
-                stderrChunks.push(chunk);
-              });
-              result.err.on('end', function() {
-                var stderrData = Buffer.concat(stderrChunks).toString();
-                if (stderrData) {
-                  console.log('');
-                  console.log('=== PlantUML stderr output ===');
-                  console.log(stderrData);
-                }
-              });
-            }
-            
-            // Also capture stdout for debugging
-            var stdoutChunks = [];
-            result.out.on('data', function(chunk) {
-              stdoutChunks.push(chunk);
-            });
-            result.out.on('end', function() {
-              var stdoutData = Buffer.concat(stdoutChunks).toString();
-              if (stdoutData) {
-                console.log('');
-                console.log('=== PlantUML stdout output ===');
-                console.log(stdoutData);
-              }
+            child.on('error', function(err) {
+              console.error('Error spawning process:', err);
+              process.exit(1);
             });
           "
 
