@@ -1,0 +1,54 @@
+@startuml RAG数据库E-R图
+skinparam linetype ortho
+skinparam roundcorner 10
+skinparam shadowing true
+skinparam defaultFontSize 10
+skinparam defaultFontName "Microsoft YaHei"
+
+left to right direction
+
+entity "knowledge_files" as files {
+  * id : INTEGER <<PK>>
+  --
+  * filename : TEXT <<UNIQUE>>
+  * original_path : TEXT
+  format : TEXT
+  enabled : INTEGER
+  chunks : INTEGER
+  vector_dim : INTEGER
+  vector_count : INTEGER
+  origin : TEXT
+  created_at : DATETIME
+  updated_at : DATETIME
+}
+
+entity "data_chunks" as chunks {
+  * id : INTEGER <<PK>>
+  --
+  * knowledge_file_id : INTEGER <<FK>>
+  * chunk_index : INTEGER
+  * chunk_text : TEXT
+  vector_id : INTEGER
+  embedding_model : TEXT
+  created_at : DATETIME
+}
+
+entity "vectors" as vectors {
+  * id : INTEGER <<PK>>
+  --
+  * chunk_id : INTEGER <<FK, UNIQUE>>
+  * embedding : BLOB
+  created_at : DATETIME
+}
+
+entity "vec0_index" as vec_index {
+  * chunk_id : INTEGER
+  --
+  * embedding : FLOAT32[768]
+}
+
+files ||--o{ chunks : "一对多\n(1:N)"
+chunks ||--|| vectors : "一对一\n(1:1)"
+vectors ||--|| vec_index : "向量索引\n(1:1)"
+
+@enduml

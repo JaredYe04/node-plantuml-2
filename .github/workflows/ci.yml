@@ -7,7 +7,7 @@ on:
     branches: [ main, master, develop ]
 
 jobs:
-  test:
+  test-linux:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -41,6 +41,124 @@ jobs:
       - name: Build WASM (optional)
         run: npm run build:wasm || echo "WASM build failed, continuing (experimental feature)"
         continue-on-error: true
+
+      - name: Run linting
+        run: npx standard --fix || echo "Linting issues found"
+
+      - name: Run tests
+        run: npm test || echo "Tests failed, but continuing..."
+
+  test-mac:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install Graphviz via Homebrew
+        run: |
+          echo "📦 Installing Graphviz via Homebrew..."
+          # Check if Homebrew is installed
+          if ! command -v brew &> /dev/null; then
+            echo "Installing Homebrew..."
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          fi
+          
+          # Add Homebrew to PATH (for Apple Silicon)
+          if [ -f /opt/homebrew/bin/brew ]; then
+            echo "Adding /opt/homebrew/bin to PATH"
+            echo "/opt/homebrew/bin" >> $GITHUB_PATH
+          fi
+          
+          # Install Graphviz
+          brew install graphviz || brew upgrade graphviz
+          
+          # Verify installation
+          echo "Verifying Graphviz installation..."
+          if [ -f /opt/homebrew/bin/dot ]; then
+            echo "✓ Graphviz found at /opt/homebrew/bin/dot"
+            /opt/homebrew/bin/dot -V
+          elif [ -f /usr/local/bin/dot ]; then
+            echo "✓ Graphviz found at /usr/local/bin/dot"
+            /usr/local/bin/dot -V
+          else
+            echo "Checking PATH for dot..."
+            which dot || echo "⚠️  dot not found in PATH"
+            dot -V || echo "⚠️  dot command failed"
+          fi
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Download PlantUML JAR
+        run: npm run build:all:jar-only || echo "JAR download failed, continuing..."
+
+      - name: Test dot path detection
+        run: |
+          echo "🧪 Testing dot path detection..."
+          node -e "
+            var dotResolver = require('./lib/dot-resolver');
+            var detected = dotResolver.resolveDotExecutable({ dotPath: null });
+            console.log('');
+            console.log('=== Dot Path Detection Test ===');
+            console.log('Detected dot path:', detected || 'NOT FOUND');
+            console.log('');
+            
+            if (detected) {
+              var fs = require('fs');
+              if (fs.existsSync(detected)) {
+                console.log('✓ Detected path exists');
+                var stats = fs.statSync(detected);
+                console.log('  File size:', stats.size, 'bytes');
+                console.log('  Is executable:', (stats.mode & parseInt('111', 8)) !== 0);
+              } else {
+                console.log('✗ Detected path does not exist');
+                process.exit(1);
+              }
+            } else {
+              console.log('✗ No dot path detected - this should not happen after Homebrew install');
+              process.exit(1);
+            }
+          "
+
+      - name: Test PlantUML testdot command
+        run: |
+          echo "🧪 Testing PlantUML testdot command..."
+          node -e "
+            var plantuml = require('./lib/node-plantuml');
+            
+            console.log('');
+            console.log('=== PlantUML testdot Test ===');
+            
+            // Test testdot
+            plantuml.testdot(function(isOk) {
+              console.log('testdot result:', isOk ? 'OK ✓' : 'FAILED ✗');
+              console.log('');
+              
+              if (isOk) {
+                console.log('✅ Graphviz is working correctly!');
+                process.exit(0);
+              } else {
+                console.log('❌ Graphviz test failed');
+                process.exit(1);
+              }
+            });
+          "
 
       - name: Run linting
         run: npx standard --fix || echo "Linting issues found"
