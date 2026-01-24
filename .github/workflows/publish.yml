@@ -554,31 +554,63 @@ jobs:
         shell: bash
         run: |
           echo "🔨 Building Graphviz package for ${{ matrix.platform }} ${{ matrix.arch }}..."
-          node scripts/build-graphviz.js ${{ matrix.platform }} ${{ matrix.arch }}
-          echo "Build step completed with exit code: $?"
+          if node scripts/build-graphviz.js ${{ matrix.platform }} ${{ matrix.arch }}; then
+            echo "✅ Build step completed successfully"
+          else
+            echo "❌ Build step failed with exit code: $?"
+            exit 1
+          fi
 
       - name: List build output directory
         shell: bash
         run: |
           echo "📁 Listing build output directory..."
           PACKAGE_DIR="runtimes/@node-plantuml-2/graphviz-${{ matrix.platform }}-${{ matrix.arch }}"
+          echo "Checking directory: $PACKAGE_DIR"
+          echo "Current working directory: $(pwd)"
+          echo ""
+          
           if [ -d "$PACKAGE_DIR" ]; then
-            echo "Package directory exists: $PACKAGE_DIR"
+            echo "✅ Package directory exists: $PACKAGE_DIR"
+            echo "Contents of package directory:"
             ls -la "$PACKAGE_DIR" || echo "Failed to list package directory"
+            echo ""
+            
             if [ -d "$PACKAGE_DIR/graphviz" ]; then
-              echo "Graphviz directory exists"
+              echo "✅ Graphviz directory exists"
+              echo "Contents of graphviz directory:"
               ls -la "$PACKAGE_DIR/graphviz" || echo "Failed to list graphviz directory"
+              echo ""
+              
               if [ -d "$PACKAGE_DIR/graphviz/bin" ]; then
-                echo "Bin directory exists"
+                echo "✅ Bin directory exists"
+                echo "Contents of bin directory:"
                 ls -la "$PACKAGE_DIR/graphviz/bin" || echo "Failed to list bin directory"
+                echo ""
+                
+                # Check for dot executable
+                if [ "${{ matrix.platform }}" = "win32" ]; then
+                  DOT_FILE="$PACKAGE_DIR/graphviz/bin/dot.exe"
+                else
+                  DOT_FILE="$PACKAGE_DIR/graphviz/bin/dot"
+                fi
+                
+                if [ -f "$DOT_FILE" ]; then
+                  echo "✅ Dot executable found: $DOT_FILE"
+                  ls -la "$DOT_FILE"
+                else
+                  echo "❌ Dot executable not found: $DOT_FILE"
+                fi
               else
-                echo "Bin directory does not exist"
+                echo "❌ Bin directory does not exist: $PACKAGE_DIR/graphviz/bin"
               fi
             else
-              echo "Graphviz directory does not exist"
+              echo "❌ Graphviz directory does not exist: $PACKAGE_DIR/graphviz"
             fi
           else
-            echo "Package directory does not exist: $PACKAGE_DIR"
+            echo "❌ Package directory does not exist: $PACKAGE_DIR"
+            echo "Listing parent directory:"
+            ls -la runtimes/@node-plantuml-2/ || echo "Parent directory does not exist"
           fi
 
       - name: Verify Graphviz package
