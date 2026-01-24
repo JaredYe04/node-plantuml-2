@@ -141,12 +141,18 @@ jobs:
           echo "🧪 Testing PlantUML testdot command..."
           node -e "
             var plantuml = require('./lib/node-plantuml');
+            var dotResolver = require('./lib/dot-resolver');
             
             console.log('');
             console.log('=== PlantUML testdot Test ===');
             
-            // Test testdot
-            plantuml.testdot(function(isOk) {
+            // First check if dot is detected
+            var detected = dotResolver.resolveDotExecutable({ dotPath: null });
+            console.log('Detected dot path:', detected || 'NOT FOUND');
+            console.log('');
+            
+            // Test testdot with full output capture
+            var result = plantuml.testdot(function(isOk) {
               console.log('testdot result:', isOk ? 'OK ✓' : 'FAILED ✗');
               console.log('');
               
@@ -155,7 +161,44 @@ jobs:
                 process.exit(0);
               } else {
                 console.log('❌ Graphviz test failed');
+                if (!detected) {
+                  console.log('  Reason: dot executable not found');
+                } else {
+                  console.log('  Reason: dot executable found but test failed');
+                  console.log('  Detected path:', detected);
+                  console.log('  This might indicate a Graphviz installation issue');
+                }
                 process.exit(1);
+              }
+            });
+            
+            // Capture stderr for debugging
+            var stderrChunks = [];
+            if (result.err) {
+              result.err.on('data', function(chunk) {
+                stderrChunks.push(chunk);
+              });
+              result.err.on('end', function() {
+                var stderrData = Buffer.concat(stderrChunks).toString();
+                if (stderrData) {
+                  console.log('');
+                  console.log('=== PlantUML stderr output ===');
+                  console.log(stderrData);
+                }
+              });
+            }
+            
+            // Also capture stdout for debugging
+            var stdoutChunks = [];
+            result.out.on('data', function(chunk) {
+              stdoutChunks.push(chunk);
+            });
+            result.out.on('end', function() {
+              var stdoutData = Buffer.concat(stdoutChunks).toString();
+              if (stdoutData) {
+                console.log('');
+                console.log('=== PlantUML stdout output ===');
+                console.log(stdoutData);
               }
             });
           "

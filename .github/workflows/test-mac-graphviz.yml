@@ -38,23 +38,44 @@ jobs:
           if [ -f /opt/homebrew/bin/brew ]; then
             echo "Adding /opt/homebrew/bin to PATH"
             echo "/opt/homebrew/bin" >> $GITHUB_PATH
+            export PATH="/opt/homebrew/bin:$PATH"
+          elif [ -f /usr/local/bin/brew ]; then
+            echo "Adding /usr/local/bin to PATH"
+            echo "/usr/local/bin" >> $GITHUB_PATH
+            export PATH="/usr/local/bin:$PATH"
           fi
           
           # Install Graphviz
-          brew install graphviz || brew upgrade graphviz
+          brew install graphviz || brew upgrade graphviz || echo "Graphviz installation/upgrade failed, but continuing..."
+          
+          # Wait a moment for installation to complete
+          sleep 2
           
           # Verify installation
           echo "Verifying Graphviz installation..."
+          DOT_PATH=""
           if [ -f /opt/homebrew/bin/dot ]; then
-            echo "✓ Graphviz found at /opt/homebrew/bin/dot"
-            /opt/homebrew/bin/dot -V
+            DOT_PATH="/opt/homebrew/bin/dot"
+            echo "✓ Graphviz found at $DOT_PATH"
           elif [ -f /usr/local/bin/dot ]; then
-            echo "✓ Graphviz found at /usr/local/bin/dot"
-            /usr/local/bin/dot -V
+            DOT_PATH="/usr/local/bin/dot"
+            echo "✓ Graphviz found at $DOT_PATH"
           else
             echo "Checking PATH for dot..."
-            which dot || echo "⚠️  dot not found in PATH"
-            dot -V || echo "⚠️  dot command failed"
+            DOT_PATH=$(which dot 2>/dev/null || echo "")
+            if [ -n "$DOT_PATH" ]; then
+              echo "✓ Graphviz found in PATH at $DOT_PATH"
+            else
+              echo "⚠️  dot not found in PATH"
+            fi
+          fi
+          
+          # Test dot command
+          if [ -n "$DOT_PATH" ]; then
+            echo "Testing dot command..."
+            "$DOT_PATH" -V 2>&1 | head -3 || echo "⚠️  dot command failed"
+          else
+            echo "⚠️  Could not find dot executable"
           fi
 
       - name: Verify Graphviz paths
@@ -131,8 +152,8 @@ jobs:
             console.log('Detected dot path:', detected || 'NOT FOUND');
             console.log('');
             
-            // Test testdot
-            plantuml.testdot(function(isOk) {
+            // Test testdot with full output capture
+            var result = plantuml.testdot(function(isOk) {
               console.log('testdot result:', isOk ? 'OK ✓' : 'FAILED ✗');
               console.log('');
               
@@ -145,9 +166,40 @@ jobs:
                   console.log('  Reason: dot executable not found');
                 } else {
                   console.log('  Reason: dot executable found but test failed');
+                  console.log('  Detected path:', detected);
                   console.log('  This might indicate a Graphviz installation issue');
                 }
                 process.exit(1);
+              }
+            });
+            
+            // Capture stderr for debugging
+            var stderrChunks = [];
+            if (result.err) {
+              result.err.on('data', function(chunk) {
+                stderrChunks.push(chunk);
+              });
+              result.err.on('end', function() {
+                var stderrData = Buffer.concat(stderrChunks).toString();
+                if (stderrData) {
+                  console.log('');
+                  console.log('=== PlantUML stderr output ===');
+                  console.log(stderrData);
+                }
+              });
+            }
+            
+            // Also capture stdout for debugging
+            var stdoutChunks = [];
+            result.out.on('data', function(chunk) {
+              stdoutChunks.push(chunk);
+            });
+            result.out.on('end', function() {
+              var stdoutData = Buffer.concat(stdoutChunks).toString();
+              if (stdoutData) {
+                console.log('');
+                console.log('=== PlantUML stdout output ===');
+                console.log(stdoutData);
               }
             });
           "
