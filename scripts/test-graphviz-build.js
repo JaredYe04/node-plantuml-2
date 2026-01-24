@@ -213,14 +213,14 @@ console.log('Test 5: Testing package.json creation...')
 try {
   var createScript = path.join(__dirname, 'create-graphviz-package-json.js')
   var testVersion = '1.0.0-test'
-  var outputDir = path.join(__dirname, '..', 'runtimes', '@node-plantuml-2', 'graphviz-' + PLATFORM + '-' + ARCH)
+  var packageJsonOutputDir = path.join(__dirname, '..', 'runtimes', '@node-plantuml-2', 'graphviz-' + PLATFORM + '-' + ARCH)
   
   childProcess.execSync(
     'node "' + createScript + '" ' + PLATFORM + ' ' + ARCH + ' ' + testVersion,
     { encoding: 'utf-8', stdio: 'inherit' }
   )
   
-  var packageJsonPath = path.join(outputDir, 'package.json')
+  var packageJsonPath = path.join(packageJsonOutputDir, 'package.json')
   if (fs.existsSync(packageJsonPath)) {
     console.log('✓ package.json created at:', packageJsonPath)
     var pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'))

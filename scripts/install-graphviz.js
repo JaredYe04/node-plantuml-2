@@ -215,11 +215,11 @@ async function installOnWindows () {
     console.log('Detected Winget package manager.')
     try {
       console.log('Installing Graphviz via Winget...')
-      var result = await execCommand('winget', ['install', 'Graphviz.Graphviz', '--accept-package-agreements', '--accept-source-agreements'], {
+      var wingetResult = await execCommand('winget', ['install', 'Graphviz.Graphviz', '--accept-package-agreements', '--accept-source-agreements'], {
         shell: true
       })
 
-      if (result.code === 0) {
+      if (wingetResult.code === 0) {
         console.log('✅ Graphviz installed successfully!')
         return true
       }

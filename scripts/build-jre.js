@@ -193,9 +193,9 @@ function buildJRE (jlinkPath) {
       // Verify JRE
       console.log('')
       console.log('Verifying JRE...')
-      var javaExe = path.join(jrePath, 'bin', PLATFORM === 'win32' ? 'java.exe' : 'java')
+      var verifyJavaExe = path.join(jrePath, 'bin', PLATFORM === 'win32' ? 'java.exe' : 'java')
       
-      var verifyChild = childProcess.spawn(javaExe, ['-version'], {
+      var verifyChild = childProcess.spawn(verifyJavaExe, ['-version'], {
         stdio: 'inherit',
         shell: process.platform === 'win32'
       })
