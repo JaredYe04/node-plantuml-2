@@ -3,7 +3,7 @@
 
 /**
  * Create package.json for Graphviz runtime package
- * 
+ *
  * Usage:
  *   node scripts/create-graphviz-package-json.js <platform> <arch> <version> [output-dir]
  */
@@ -71,4 +71,3 @@ fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n')
 
 console.log('Created package.json:', packageJsonPath)
 console.log('Package:', packageName + '@' + VERSION)
-

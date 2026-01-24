@@ -7,7 +7,6 @@
  */
 
 var fs = require('fs')
-var path = require('path')
 
 console.log('Verifying GitHub Actions workflow setup...')
 console.log('')
@@ -79,13 +78,13 @@ if (fs.existsSync(workflowPath)) {
     } else {
       warnings.push('Workflow may be missing runtime build job')
     }
-    
+
     if (workflowContent.includes('matrix')) {
       console.log('✓ Workflow uses matrix strategy')
     } else {
       warnings.push('Workflow may not use matrix strategy')
     }
-    
+
     if (workflowContent.includes('needs.prepare.outputs.version')) {
       console.log('✓ Workflow passes version between jobs')
     } else {
@@ -113,7 +112,7 @@ if (errors.length === 0 && warnings.length === 0) {
     })
     console.log('')
   }
-  
+
   if (warnings.length > 0) {
     console.log('⚠️  Warnings:')
     warnings.forEach(function (warn) {
@@ -121,7 +120,7 @@ if (errors.length === 0 && warnings.length === 0) {
     })
     console.log('')
   }
-  
+
   if (errors.length > 0) {
     process.exit(1)
   } else {
@@ -129,4 +128,3 @@ if (errors.length === 0 && warnings.length === 0) {
     process.exit(0)
   }
 }
-

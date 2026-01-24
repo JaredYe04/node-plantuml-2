@@ -5,7 +5,7 @@
  * Test Graphviz build and detection across all supported platforms
  * This script simulates testing on different platforms by checking
  * the build scripts and detection logic
- * 
+ *
  * Usage:
  *   node scripts/test-all-platforms-graphviz.js
  */
@@ -38,7 +38,7 @@ for (var i = 0; i < platforms.length; i++) {
   var test = platforms[i]
   console.log('Testing:', test.name)
   console.log('  Platform:', test.platform, 'Arch:', test.arch)
-  
+
   var result = {
     platform: test.platform,
     arch: test.arch,
@@ -48,28 +48,28 @@ for (var i = 0; i < platforms.length; i++) {
     canBuild: false,
     isCurrentPlatform: false
   }
-  
+
   // Check if this is the current platform
   var normalizedCurrent = currentPlatform === 'win32' ? 'win32' : (currentPlatform === 'darwin' ? 'darwin' : 'linux')
   var normalizedCurrentArch = currentArch === 'x64' ? 'x64' : (currentArch === 'arm64' ? 'arm64' : 'x64')
-  
+
   if (test.platform === normalizedCurrent && test.arch === normalizedCurrentArch) {
     result.isCurrentPlatform = true
     console.log('  ✓ This is the current platform')
   }
-  
+
   // Get package name
   result.packageName = dotResolver.getGraphvizPackageName(test.platform, test.arch)
   if (result.packageName) {
     console.log('  Package name:', result.packageName)
-    
+
     // Check if package is installed
     try {
       var pkgPath = require.resolve(result.packageName + '/package.json')
       var pkgDir = path.dirname(pkgPath)
       var dotExe = test.platform === 'win32' ? 'dot.exe' : 'dot'
       var dotPath = path.join(pkgDir, 'graphviz', 'bin', dotExe)
-      
+
       if (fs.existsSync(dotPath)) {
         result.bundledPath = dotPath
         console.log('  ✓ Bundled Graphviz found at:', dotPath)
@@ -82,13 +82,13 @@ for (var i = 0; i < platforms.length; i++) {
   } else {
     console.log('  ✗ Unsupported platform/arch combination')
   }
-  
+
   // Check if we can build on this platform
   if (result.isCurrentPlatform) {
     // Check if system Graphviz is available
     var systemDot = null
     var dotName = test.platform === 'win32' ? 'dot.exe' : 'dot'
-    
+
     // Try common paths
     var paths = []
     if (test.platform === 'darwin') {
@@ -107,14 +107,14 @@ for (var i = 0; i < platforms.length; i++) {
       paths.push('/usr/bin/dot')
       paths.push('/usr/local/bin/dot')
     }
-    
+
     for (var j = 0; j < paths.length; j++) {
       if (fs.existsSync(paths[j])) {
         systemDot = paths[j]
         break
       }
     }
-    
+
     // Try which/where
     if (!systemDot) {
       try {
@@ -128,7 +128,7 @@ for (var i = 0; i < platforms.length; i++) {
         // Not found
       }
     }
-    
+
     if (systemDot) {
       result.canBuild = true
       console.log('  ✓ System Graphviz available for building:', systemDot)
@@ -138,7 +138,7 @@ for (var i = 0; i < platforms.length; i++) {
   } else {
     console.log('  ℹ️  Not current platform (cannot test build)')
   }
-  
+
   results.push(result)
   console.log('')
 }
@@ -208,4 +208,3 @@ if (installedCount < supportedCount) {
 console.log('To test build on current platform:')
 console.log('  npm run test:graphviz')
 console.log('')
-

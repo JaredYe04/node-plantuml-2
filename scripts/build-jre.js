@@ -3,10 +3,10 @@
 
 /**
  * Build minimal JRE using jlink for a specific platform
- * 
+ *
  * Usage:
  *   node scripts/build-jre.js <platform> <arch> [output-dir]
- * 
+ *
  * Example:
  *   node scripts/build-jre.js darwin arm64
  */
@@ -45,7 +45,7 @@ function getJlinkPath () {
   if (javaHome) {
     var jlinkPath = path.join(javaHome, 'bin', process.platform === 'win32' ? 'jlink.exe' : 'jlink')
     console.log('Checking for jlink at:', jlinkPath)
-    
+
     // Check if file exists
     if (fs.existsSync(jlinkPath)) {
       try {
@@ -73,7 +73,7 @@ function getJlinkPath () {
   } else {
     console.log('JAVA_HOME not set')
   }
-  
+
   // Fallback to 'jlink' in PATH
   console.log('Trying system jlink from PATH...')
   return 'jlink'
@@ -83,7 +83,7 @@ function getJlinkPath () {
 function checkJlink (jlinkPath) {
   return new Promise(function (resolve, reject) {
     var isAbsolutePath = path.isAbsolute(jlinkPath) || jlinkPath.includes(path.sep)
-    
+
     if (isAbsolutePath) {
       // Try execFile first (for binaries)
       childProcess.execFile(jlinkPath, ['--version'], function (err, stdout, stderr) {
@@ -137,7 +137,7 @@ function checkJlink (jlinkPath) {
 function buildJRE (jlinkPath) {
   return new Promise(function (resolve, reject) {
     var jrePath = path.join(OUTPUT_DIR, 'jre')
-    
+
     // Create output directory
     if (!fs.existsSync(OUTPUT_DIR)) {
       fs.mkdirSync(OUTPUT_DIR, { recursive: true })
@@ -145,7 +145,7 @@ function buildJRE (jlinkPath) {
 
     console.log('Running jlink...')
     console.log('Using jlink:', jlinkPath)
-    
+
     var jlinkArgs = [
       '--add-modules', 'java.base,java.desktop,java.xml,java.logging',
       '--strip-debug',
@@ -163,75 +163,75 @@ function buildJRE (jlinkPath) {
           return
         }
 
-      // Set executable permissions (Unix platforms)
-      if (PLATFORM !== 'win32') {
-        console.log('Setting executable permissions...')
-        var javaExe = path.join(jrePath, 'bin', 'java')
-        if (fs.existsSync(javaExe)) {
-          try {
-            fs.chmodSync(javaExe, 0o755)
-            
-            // Set permissions for all executables in bin/
-            var binDir = path.join(jrePath, 'bin')
-            if (fs.existsSync(binDir)) {
-              var files = fs.readdirSync(binDir)
-              files.forEach(function (file) {
-                var filePath = path.join(binDir, file)
-                try {
-                  fs.chmodSync(filePath, 0o755)
-                } catch (e) {
+        // Set executable permissions (Unix platforms)
+        if (PLATFORM !== 'win32') {
+          console.log('Setting executable permissions...')
+          var javaExe = path.join(jrePath, 'bin', 'java')
+          if (fs.existsSync(javaExe)) {
+            try {
+              fs.chmodSync(javaExe, 0o755)
+
+              // Set permissions for all executables in bin/
+              var binDir = path.join(jrePath, 'bin')
+              if (fs.existsSync(binDir)) {
+                var files = fs.readdirSync(binDir)
+                files.forEach(function (file) {
+                  var filePath = path.join(binDir, file)
+                  try {
+                    fs.chmodSync(filePath, 0o755)
+                  } catch (e) {
                   // Ignore chmod errors
-                }
-              })
+                  }
+                })
+              }
+            } catch (e) {
+              console.warn('Warning: Could not set executable permissions:', e.message)
             }
-          } catch (e) {
-            console.warn('Warning: Could not set executable permissions:', e.message)
           }
         }
-      }
 
-      // Verify JRE
-      console.log('')
-      console.log('Verifying JRE...')
-      var verifyJavaExe = path.join(jrePath, 'bin', PLATFORM === 'win32' ? 'java.exe' : 'java')
-      
-      var verifyChild = childProcess.spawn(verifyJavaExe, ['-version'], {
-        stdio: 'inherit',
-        shell: process.platform === 'win32'
-      })
+        // Verify JRE
+        console.log('')
+        console.log('Verifying JRE...')
+        var verifyJavaExe = path.join(jrePath, 'bin', PLATFORM === 'win32' ? 'java.exe' : 'java')
 
-      verifyChild.on('close', function (verifyCode) {
-        if (verifyCode !== 0) {
-          console.warn('Warning: JRE verification failed')
-        } else {
-          console.log('')
-          console.log('✓ JRE built successfully:', jrePath)
-          console.log('')
-          console.log('Next steps:')
-          console.log('  1. Create package.json in', OUTPUT_DIR)
-          console.log('  2. Test the JRE with PlantUML')
-          console.log('  3. Publish the package: cd ' + OUTPUT_DIR + ' && npm publish --access public')
-        }
-        resolve()
-      })
+        var verifyChild = childProcess.spawn(verifyJavaExe, ['-version'], {
+          stdio: 'inherit',
+          shell: process.platform === 'win32'
+        })
 
-      verifyChild.on('error', function (err) {
-        console.warn('Warning: Could not verify JRE:', err.message)
-        resolve()
+        verifyChild.on('close', function (verifyCode) {
+          if (verifyCode !== 0) {
+            console.warn('Warning: JRE verification failed')
+          } else {
+            console.log('')
+            console.log('✓ JRE built successfully:', jrePath)
+            console.log('')
+            console.log('Next steps:')
+            console.log('  1. Create package.json in', OUTPUT_DIR)
+            console.log('  2. Test the JRE with PlantUML')
+            console.log('  3. Publish the package: cd ' + OUTPUT_DIR + ' && npm publish --access public')
+          }
+          resolve()
+        })
+
+        verifyChild.on('error', function (err) {
+          console.warn('Warning: Could not verify JRE:', err.message)
+          resolve()
+        })
       })
-    })
-  }
+    }
 
     // Use spawn - for absolute paths, try without shell first, fallback to shell if needed
     var isAbsolutePath = path.isAbsolute(jlinkPath) || jlinkPath.includes(path.sep)
     var child
-    
+
     if (isAbsolutePath) {
       // For absolute paths, try without shell first (works for binaries)
       child = childProcess.spawn(jlinkPath, jlinkArgs, {
         stdio: 'inherit'
       })
-      
+
       // If spawn fails immediately (ENOENT/EACCES), try with shell (for shell scripts)
       child.on('error', function (spawnErr) {
         if (spawnErr.code === 'ENOENT' || spawnErr.code === 'EACCES') {
@@ -250,7 +250,7 @@ function buildJRE (jlinkPath) {
           reject(new Error('Failed to spawn jlink: ' + spawnErr.message))
         }
       })
-      
+
       // Attach handlers if spawn succeeds
       attachHandlers(child)
     } else {
@@ -280,4 +280,3 @@ checkJlink(jlinkPath)
     console.error('Build failed:', err.message)
     process.exit(1)
   })
-

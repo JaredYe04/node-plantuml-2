@@ -53,31 +53,31 @@ function convertFile (txtFile, formats, callback) {
 
     // Continue with conversion
     var conversions = formats.map(function (format) {
-    return new Promise(function (resolve, reject) {
-      var outputDir = format === 'svg' ? OUTPUT_SVG_DIR : OUTPUT_PNG_DIR
-      var outputFile = path.join(outputDir, basename + '.' + format)
+      return new Promise(function (resolve, reject) {
+        var outputDir = format === 'svg' ? OUTPUT_SVG_DIR : OUTPUT_PNG_DIR
+        var outputFile = path.join(outputDir, basename + '.' + format)
 
-      console.log('  Generating ' + format.toUpperCase() + ': ' + outputFile)
+        console.log('  Generating ' + format.toUpperCase() + ': ' + outputFile)
 
-      var gen = plantuml.generate(plantumlCode, { format: format })
-      var writeStream = fs.createWriteStream(outputFile)
+        var gen = plantuml.generate(plantumlCode, { format: format })
+        var writeStream = fs.createWriteStream(outputFile)
 
-      gen.out.pipe(writeStream)
+        gen.out.pipe(writeStream)
 
-      writeStream.on('finish', function () {
-        console.log('  ✓ ' + format.toUpperCase() + ' generated: ' + outputFile)
-        resolve()
-      })
+        writeStream.on('finish', function () {
+          console.log('  ✓ ' + format.toUpperCase() + ' generated: ' + outputFile)
+          resolve()
+        })
 
-      gen.out.on('error', function (err) {
-        console.error('  ✗ Error generating ' + format + ':', err)
-        reject(err)
-      })
+        gen.out.on('error', function (err) {
+          console.error('  ✗ Error generating ' + format + ':', err)
+          reject(err)
+        })
 
-      writeStream.on('error', function (err) {
-        console.error('  ✗ Error writing ' + format + ':', err)
-        reject(err)
-      })
+        writeStream.on('error', function (err) {
+          console.error('  ✗ Error writing ' + format + ':', err)
+          reject(err)
+        })
       })
     })
 

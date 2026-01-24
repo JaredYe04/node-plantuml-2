@@ -88,7 +88,7 @@ async function installOnMac () {
   try {
     console.log('Installing Graphviz via Homebrew...')
     var result = await execCommand('brew', ['install', 'graphviz'])
-    
+
     if (result.code === 0) {
       console.log('✅ Graphviz installed successfully!')
       return true
@@ -333,4 +333,3 @@ module.exports = {
   installOnLinux: installOnLinux,
   installOnWindows: installOnWindows
 }
-

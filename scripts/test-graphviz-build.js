@@ -3,10 +3,10 @@
 
 /**
  * Test script to verify Graphviz build and detection on different platforms
- * 
+ *
  * Usage:
  *   node scripts/test-graphviz-build.js [platform] [arch]
- * 
+ *
  * Example:
  *   node scripts/test-graphviz-build.js darwin arm64
  *   node scripts/test-graphviz-build.js win32 x64
@@ -49,7 +49,7 @@ var dotResolver = require('../lib/dot-resolver')
 function findSystemDot () {
   var dotName = PLATFORM === 'win32' ? 'dot.exe' : 'dot'
   var paths = []
-  
+
   if (PLATFORM === 'darwin') {
     if (ARCH === 'arm64') {
       paths.push('/opt/homebrew/bin/dot')
@@ -66,13 +66,13 @@ function findSystemDot () {
     paths.push('/usr/bin/dot')
     paths.push('/usr/local/bin/dot')
   }
-  
+
   for (var i = 0; i < paths.length; i++) {
     if (fs.existsSync(paths[i])) {
       return paths[i]
     }
   }
-  
+
   try {
     var command = PLATFORM === 'win32' ? 'where' : 'which'
     var result = childProcess.execSync(command + ' ' + dotName, { encoding: 'utf-8' })
@@ -83,7 +83,7 @@ function findSystemDot () {
   } catch (e) {
     // Not found
   }
-  
+
   return null
 }
 
@@ -166,22 +166,22 @@ if (systemDot) {
   try {
     var buildScript = path.join(__dirname, 'build-graphviz.js')
     console.log('Running build script...')
-    
+
     childProcess.execSync(
       'node "' + buildScript + '" ' + PLATFORM + ' ' + ARCH,
       { encoding: 'utf-8', stdio: 'inherit' }
     )
-    
+
     console.log('✓ Build completed')
-    
+
     // Verify built package
     var outputDir = path.join(__dirname, '..', 'runtimes', '@node-plantuml-2', 'graphviz-' + PLATFORM + '-' + ARCH)
     var dotExe = PLATFORM === 'win32' ? 'dot.exe' : 'dot'
     var builtDotPath = path.join(outputDir, 'graphviz', 'bin', dotExe)
-    
+
     if (fs.existsSync(builtDotPath)) {
       console.log('✓ Built dot executable found at:', builtDotPath)
-      
+
       // Test the built executable
       try {
         var builtVersion = childProcess.execSync('"' + builtDotPath + '" -V', {
@@ -196,7 +196,6 @@ if (systemDot) {
     } else {
       console.log('✗ Built dot executable not found at:', builtDotPath)
     }
-    
   } catch (e) {
     console.log('✗ Build failed:', e.message)
     if (e.stdout) console.log('STDOUT:', e.stdout)
@@ -214,12 +213,12 @@ try {
   var createScript = path.join(__dirname, 'create-graphviz-package-json.js')
   var testVersion = '1.0.0-test'
   var packageJsonOutputDir = path.join(__dirname, '..', 'runtimes', '@node-plantuml-2', 'graphviz-' + PLATFORM + '-' + ARCH)
-  
+
   childProcess.execSync(
     'node "' + createScript + '" ' + PLATFORM + ' ' + ARCH + ' ' + testVersion,
     { encoding: 'utf-8', stdio: 'inherit' }
   )
-  
+
   var packageJsonPath = path.join(packageJsonOutputDir, 'package.json')
   if (fs.existsSync(packageJsonPath)) {
     console.log('✓ package.json created at:', packageJsonPath)
@@ -242,4 +241,3 @@ console.log('System Graphviz:', systemDot ? '✓ Found' : '✗ Not found')
 console.log('dot-resolver detection:', detected ? '✓ Working' : '✗ Failed')
 console.log('Bundled Graphviz:', bundledGraphviz ? '✓ Found' : 'ℹ️  Not installed')
 console.log('')
-

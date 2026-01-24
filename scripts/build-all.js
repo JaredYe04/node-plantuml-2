@@ -226,7 +226,7 @@ if (require.main === module) {
     console.log('')
     process.exit(0)
   }
-  
+
   // Remove --skip-wasm option (no longer needed)
   if (args.indexOf('--skip-wasm') !== -1) {
     console.log('Note: --skip-wasm option is deprecated (Wasm build removed)')

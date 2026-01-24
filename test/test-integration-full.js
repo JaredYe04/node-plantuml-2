@@ -4,7 +4,7 @@
 /**
  * Comprehensive integration test for node-plantuml-2
  * Tests JRE access, Graphviz detection, and PlantUML rendering
- * 
+ *
  * Usage:
  *   node test/test-integration-full.js
  */
@@ -44,7 +44,7 @@ try {
   var javaPath = javaResolver.resolveJavaExecutable({})
   if (javaPath) {
     logTest('JRE Detection', true, 'Found at: ' + javaPath)
-    
+
     // Verify JRE works
     try {
       childProcess.execSync('"' + javaPath + '" -version', {
@@ -70,7 +70,7 @@ try {
   var dotPath = dotResolver.resolveDotExecutable({ dotPath: null })
   if (dotPath) {
     logTest('Graphviz Detection', true, 'Found at: ' + dotPath)
-    
+
     // Check if bundled or system
     var bundled = dotResolver.resolveBundledGraphviz()
     if (bundled && bundled === dotPath) {
@@ -78,7 +78,7 @@ try {
     } else {
       logTest('Graphviz Source', true, 'Using system Graphviz')
     }
-    
+
     // Verify Graphviz works
     try {
       childProcess.execSync('"' + dotPath + '" -V', {
@@ -126,26 +126,26 @@ function testPngGeneration () {
     console.log('---')
     var testCode = '@startuml\nAlice -> Bob: Hello\n@enduml'
     var gen = plantuml.generate(testCode, { format: 'png' })
-    
+
     var chunks = []
     var hasError = false
-    
+
     gen.out.on('data', function (chunk) {
       chunks.push(chunk)
     })
-    
+
     gen.out.on('error', function (err) {
       logTest('PNG Generation', false, 'Error: ' + err.message)
       hasError = true
       resolve()
     })
-    
+
     gen.out.on('end', function () {
       if (hasError) {
         resolve()
         return
       }
-      
+
       var buffer = Buffer.concat(chunks)
       if (buffer.length > 0) {
         // Verify it's a valid PNG (starts with PNG signature)
@@ -157,7 +157,7 @@ function testPngGeneration () {
       console.log('')
       resolve()
     })
-    
+
     setTimeout(function () {
       if (chunks.length === 0 && !hasError) {
         logTest('PNG Generation', false, 'Timeout')
@@ -175,26 +175,26 @@ function testSvgGeneration () {
     console.log('---')
     var testCode = '@startuml\nA -> B\n@enduml'
     var gen = plantuml.generate(testCode, { format: 'svg' })
-    
+
     var chunks = []
     var hasError = false
-    
+
     gen.out.on('data', function (chunk) {
       chunks.push(chunk)
     })
-    
+
     gen.out.on('error', function (err) {
       logTest('SVG Generation', false, 'Error: ' + err.message)
       hasError = true
       resolve()
     })
-    
+
     gen.out.on('end', function () {
       if (hasError) {
         resolve()
         return
       }
-      
+
       var buffer = Buffer.concat(chunks)
       if (buffer.length > 0) {
         var isSvg = buffer.toString('utf-8', 0, Math.min(100, buffer.length)).indexOf('<svg') !== -1
@@ -205,7 +205,7 @@ function testSvgGeneration () {
       console.log('')
       resolve()
     })
-    
+
     setTimeout(function () {
       if (chunks.length === 0 && !hasError) {
         logTest('SVG Generation', false, 'Timeout')
@@ -226,26 +226,26 @@ function testGraphvizDiagram () {
       // Use a simple activity diagram that requires Graphviz
       var testCode = '@startuml\nstart\n:Hello;\nstop\n@enduml'
       var gen = plantuml.generate(testCode, { format: 'png' })
-      
+
       var chunks = []
       var hasError = false
-      
+
       gen.out.on('data', function (chunk) {
         chunks.push(chunk)
       })
-      
+
       gen.out.on('error', function (err) {
         logTest('Graphviz Diagram', false, 'Error: ' + err.message)
         hasError = true
         resolve()
       })
-      
+
       gen.out.on('end', function () {
         if (hasError) {
           resolve()
           return
         }
-        
+
         var buffer = Buffer.concat(chunks)
         if (buffer.length > 0) {
           logTest('Graphviz Diagram', true, 'Generated ' + buffer.length + ' bytes')
@@ -255,7 +255,7 @@ function testGraphvizDiagram () {
         console.log('')
         resolve()
       })
-      
+
       setTimeout(function () {
         if (chunks.length === 0 && !hasError) {
           logTest('Graphviz Diagram', false, 'Timeout')

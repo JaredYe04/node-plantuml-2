@@ -25,15 +25,15 @@ plantuml.testdot(function (isOk) {
       console.info('')
       console.info('⚠️  Graphviz was not found on the system.')
       console.info('')
-      
+
       // Try to automatically install Graphviz
       var autoInstall = process.env.NODE_PLANTUML_AUTO_INSTALL_GRAPHVIZ !== 'false'
-      
+
       if (autoInstall) {
         console.info('🔧 Attempting to automatically install Graphviz...')
         console.info('   (Set NODE_PLANTUML_AUTO_INSTALL_GRAPHVIZ=false to skip)')
         console.info('')
-        
+
         installGraphviz.installGraphviz()
           .then(function (success) {
             if (success) {

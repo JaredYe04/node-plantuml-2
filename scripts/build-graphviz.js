@@ -4,10 +4,10 @@
 /**
  * Build Graphviz package for a specific platform
  * Copies Graphviz binaries from system installation to npm package
- * 
+ *
  * Usage:
  *   node scripts/build-graphviz.js <platform> <arch> [output-dir]
- * 
+ *
  * Example:
  *   node scripts/build-graphviz.js darwin arm64
  */
@@ -55,7 +55,7 @@ if (!fs.existsSync(graphvizDir)) {
 function findSystemDot () {
   var dotName = PLATFORM === 'win32' ? 'dot.exe' : 'dot'
   var paths = []
-  
+
   if (PLATFORM === 'darwin') {
     // macOS paths
     if (ARCH === 'arm64') {
@@ -75,14 +75,14 @@ function findSystemDot () {
     paths.push('/usr/bin/dot')
     paths.push('/usr/local/bin/dot')
   }
-  
+
   // Check paths
   for (var i = 0; i < paths.length; i++) {
     if (fs.existsSync(paths[i])) {
       return paths[i]
     }
   }
-  
+
   // Try which/where command
   try {
     var command = PLATFORM === 'win32' ? 'where' : 'which'
@@ -94,7 +94,7 @@ function findSystemDot () {
   } catch (e) {
     // Not found in PATH
   }
-  
+
   return null
 }
 
@@ -107,19 +107,19 @@ var visitedPaths = new Set()
 function copyRecursive (src, dest) {
   // Normalize paths to avoid issues with different path formats
   var normalizedSrc = path.resolve(src)
-  
+
   // Check for circular references
   if (visitedPaths.has(normalizedSrc)) {
     console.log('Skipping circular reference:', src)
     return
   }
-  
+
   visitedPaths.add(normalizedSrc)
-  
+
   try {
     // Use lstatSync to detect symlinks without following them
     var stat = fs.lstatSync(src)
-    
+
     if (stat.isSymbolicLink()) {
       // Copy the symlink itself, don't follow it
       var linkTarget = fs.readlinkSync(src)
@@ -128,7 +128,7 @@ function copyRecursive (src, dest) {
       }
       return
     }
-    
+
     if (stat.isDirectory()) {
       // Skip known problematic directories
       var basename = path.basename(src)
@@ -136,7 +136,7 @@ function copyRecursive (src, dest) {
         console.log('Skipping problematic X11 symlink directory:', src)
         return
       }
-      
+
       if (!fs.existsSync(dest)) {
         fs.mkdirSync(dest, { recursive: true })
       }
@@ -173,44 +173,55 @@ function copyRecursive (src, dest) {
 function buildGraphviz () {
   try {
     console.log('Searching for Graphviz installation on system...')
-    
+
     // Find system dot executable
     var dotPath = findSystemDot()
-    
+
     if (!dotPath) {
       throw new Error('Graphviz not found on system. Please install Graphviz first:\n' +
         '  - macOS: brew install graphviz\n' +
         '  - Linux: sudo apt-get install graphviz (or your package manager)\n' +
         '  - Windows: choco install graphviz -y')
     }
-    
+
     console.log('✓ Found dot executable at:', dotPath)
-    
+
     // Get Graphviz installation directory
     var graphvizInstallDir = path.dirname(path.dirname(dotPath)) // Go up from bin/
     var binDir = path.join(graphvizInstallDir, 'bin')
     var libDir = path.join(graphvizInstallDir, 'lib')
-    
+
     console.log('Graphviz installation directory:', graphvizInstallDir)
     console.log('')
-    
+
     // Copy bin directory
     var destBinDir = path.join(graphvizDir, 'bin')
     var destDotPath = path.join(destBinDir, path.basename(dotPath))
-    
+
     if (fs.existsSync(binDir)) {
       console.log('Copying bin directory...')
+      console.log('  Source:', binDir)
+      console.log('  Destination:', destBinDir)
       visitedPaths.clear() // Reset visited paths for each directory
       copyRecursive(binDir, destBinDir)
       console.log('✓ Copied bin directory')
-      
+
+      // Verify dot executable was copied
+      if (!fs.existsSync(destDotPath)) {
+        throw new Error('Dot executable not found after copying bin directory. Expected at: ' + destDotPath)
+      }
+      console.log('✓ Verified dot executable exists at:', destDotPath)
+
       // Make dot executable on Unix
       if (PLATFORM !== 'win32' && fs.existsSync(destDotPath)) {
         fs.chmodSync(destDotPath, 0o755)
+        console.log('✓ Set executable permissions')
       }
     } else {
       // Just copy dot executable
       console.log('Copying dot executable...')
+      console.log('  Source:', dotPath)
+      console.log('  Destination:', destDotPath)
       if (!fs.existsSync(destBinDir)) {
         fs.mkdirSync(destBinDir, { recursive: true })
       }
@@ -219,8 +230,14 @@ function buildGraphviz () {
         fs.chmodSync(destDotPath, 0o755)
       }
       console.log('✓ Copied dot executable')
+
+      // Verify copy was successful
+      if (!fs.existsSync(destDotPath)) {
+        throw new Error('Dot executable not found after copying. Expected at: ' + destDotPath)
+      }
+      console.log('✓ Verified dot executable exists')
     }
-    
+
     // Copy lib directory if exists
     if (fs.existsSync(libDir)) {
       console.log('Copying lib directory...')
@@ -229,7 +246,7 @@ function buildGraphviz () {
       copyRecursive(libDir, destLibDir)
       console.log('✓ Copied lib directory')
     }
-    
+
     // Copy share directory if exists (for config files, etc.)
     var shareDir = path.join(graphvizInstallDir, 'share')
     if (fs.existsSync(shareDir)) {
@@ -239,7 +256,7 @@ function buildGraphviz () {
       copyRecursive(shareDir, destShareDir)
       console.log('✓ Copied share directory')
     }
-    
+
     // On Windows, also check for Graphviz installation in Program Files
     if (PLATFORM === 'win32') {
       var etcDir = path.join(graphvizInstallDir, 'etc')
@@ -251,12 +268,11 @@ function buildGraphviz () {
         console.log('✓ Copied etc directory')
       }
     }
-    
+
     console.log('')
     console.log('✅ Graphviz package built successfully!')
     console.log('Output directory:', OUTPUT_DIR)
     console.log('Graphviz directory:', graphvizDir)
-    
   } catch (err) {
     console.error('❌ Error building Graphviz package:', err.message)
     console.error(err.stack)
@@ -272,4 +288,3 @@ if (require.main === module) {
 module.exports = {
   buildGraphviz: buildGraphviz
 }
-

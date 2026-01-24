@@ -127,7 +127,7 @@ describe('PlantUML Syntax Fixer', function () {
     it('should not modify valid code', function (done) {
       var code = '@startuml\nA -> B: Hello\n@enduml'
       plantuml.fixSyntax(code, function (err, fixed, wasFixed) {
-        expect(err).to.be.null
+        expect(err).to.equal(null)
         expect(wasFixed).to.equal(false)
         expect(fixed).to.equal(code)
         done()
@@ -137,7 +137,7 @@ describe('PlantUML Syntax Fixer', function () {
     it('should not modify simple class definitions', function (done) {
       var code = '@startuml\nclass MyClass {\n  +method()\n}\n@enduml'
       plantuml.fixSyntax(code, function (err, fixed, wasFixed) {
-        expect(err).to.be.null
+        expect(err).to.equal(null)
         expect(wasFixed).to.equal(false)
         expect(fixed).to.equal(code)
         done()
@@ -147,7 +147,7 @@ describe('PlantUML Syntax Fixer', function () {
     it('should not modify already quoted text', function (done) {
       var code = '@startuml\nA -> B: "already quoted"\n@enduml'
       plantuml.fixSyntax(code, function (err, fixed, wasFixed) {
-        expect(err).to.be.null
+        expect(err).to.equal(null)
         expect(wasFixed).to.equal(false)
         expect(fixed).to.equal(code)
         done()
@@ -157,7 +157,7 @@ describe('PlantUML Syntax Fixer', function () {
     it('should work with options', function (done) {
       var code = '@startuml\nA -> B: Hello\n@enduml'
       plantuml.fixSyntax(code, { warnOnFix: false }, function (err, fixed, wasFixed) {
-        expect(err).to.be.null
+        expect(err).to.equal(null)
         expect(wasFixed).to.equal(false)
         expect(fixed).to.equal(code)
         done()
@@ -167,7 +167,7 @@ describe('PlantUML Syntax Fixer', function () {
     it('should handle callback as second parameter', function (done) {
       var code = '@startuml\nA -> B: Hello\n@enduml'
       plantuml.fixSyntax(code, function (err, fixed, wasFixed) {
-        expect(err).to.be.null
+        expect(err).to.equal(null)
         expect(wasFixed).to.equal(false)
         expect(fixed).to.equal(code)
         done()

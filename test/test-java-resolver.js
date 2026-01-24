@@ -7,7 +7,6 @@
  */
 
 var javaResolver = require('../lib/java-resolver')
-var path = require('path')
 var fs = require('fs')
 
 console.log('Testing Java Resolver...')
@@ -103,4 +102,3 @@ if (defaultJava && fs.existsSync(defaultJava)) {
   console.log('Please ensure Java is installed or bundled JRE is available')
   process.exit(1)
 }
-

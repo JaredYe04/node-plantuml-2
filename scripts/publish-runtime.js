@@ -3,10 +3,10 @@
 
 /**
  * Publish runtime package script
- * 
+ *
  * Usage:
  *   node scripts/publish-runtime.js <platform> <arch> [--dry-run]
- * 
+ *
  * Example:
  *   node scripts/publish-runtime.js win32 x64
  */
@@ -100,4 +100,3 @@ publishProcess.on('error', function (err) {
   console.error('Error publishing:', err.message)
   process.exit(1)
 })
-

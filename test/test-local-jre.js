@@ -9,7 +9,6 @@
 var javaResolver = require('../lib/java-resolver')
 var path = require('path')
 var fs = require('fs')
-var Module = require('module')
 
 console.log('Testing with local JRE...')
 console.log('')
@@ -35,7 +34,7 @@ var resolved = javaResolver.resolveJavaExecutable({
 
 if (resolved && fs.existsSync(resolved)) {
   console.log('✓ Java resolved:', resolved)
-  
+
   // Verify it works
   var childProcess = require('child_process')
   try {
@@ -69,18 +68,18 @@ try {
     format: 'png',
     javaPath: javaExe
   })
-  
+
   var outputPath = path.join(__dirname, 'output', 'test-local-jre.png')
   var outputDir = path.dirname(outputPath)
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true })
   }
-  
+
   var chunks = []
   gen.out.on('data', function (chunk) {
     chunks.push(chunk)
   })
-  
+
   gen.out.on('end', function () {
     var buffer = Buffer.concat(chunks)
     if (buffer.length > 0) {
@@ -95,20 +94,18 @@ try {
       process.exit(1)
     }
   })
-  
+
   gen.out.on('error', function (err) {
     console.error('✗ Error generating PNG:', err.message)
     process.exit(1)
   })
-  
+
   setTimeout(function () {
     console.error('✗ Test timed out after 30 seconds')
     process.exit(1)
   }, 30000)
-  
 } catch (err) {
   console.error('✗ Error:', err.message)
   console.error(err.stack)
   process.exit(1)
 }
-

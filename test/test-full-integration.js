@@ -7,7 +7,6 @@
  */
 
 var plantuml = require('../lib/node-plantuml')
-var javaResolver = require('../lib/java-resolver')
 var path = require('path')
 var fs = require('fs')
 
@@ -46,49 +45,49 @@ if (useLocalJre) {
 }
 console.log('')
 
-function runTest(testCase, index) {
+function runTest (testCase, index) {
   return new Promise(function (resolve) {
     console.log(`Test ${index + 1}: ${testCase.name}`)
-    
+
     var options = {
       format: testCase.format
     }
-    
+
     if (useLocalJre) {
       options.javaPath = localJrePath
     }
-    
+
     try {
       var gen = plantuml.generate(testCase.code, options)
       var outputPath = path.join(__dirname, 'output', `test-${index + 1}-${testCase.format}.${testCase.format === 'svg' ? 'svg' : 'png'}`)
       var outputDir = path.dirname(outputPath)
-      
+
       if (!fs.existsSync(outputDir)) {
         fs.mkdirSync(outputDir, { recursive: true })
       }
-      
+
       var chunks = []
       var hasError = false
-      
+
       gen.out.on('data', function (chunk) {
         chunks.push(chunk)
       })
-      
+
       gen.out.on('error', function (err) {
         console.log('  ✗ Error:', err.message)
         hasError = true
         failed++
         resolve()
       })
-      
+
       gen.out.on('end', function () {
         if (hasError) {
           resolve()
           return
         }
-        
+
         var buffer = Buffer.concat(chunks)
-        
+
         if (buffer.length > 0) {
           fs.writeFileSync(outputPath, buffer)
           console.log(`  ✓ Generated: ${outputPath} (${buffer.length} bytes)`)
@@ -97,10 +96,10 @@ function runTest(testCase, index) {
           console.log('  ✗ Empty output')
           failed++
         }
-        
+
         resolve()
       })
-      
+
       // Timeout
       setTimeout(function () {
         if (chunks.length === 0 && !hasError) {
@@ -109,7 +108,6 @@ function runTest(testCase, index) {
           resolve()
         }
       }, 30000)
-      
     } catch (err) {
       console.log('  ✗ Exception:', err.message)
       failed++
@@ -118,18 +116,18 @@ function runTest(testCase, index) {
   })
 }
 
-async function runAllTests() {
+async function runAllTests () {
   for (var i = 0; i < testCases.length; i++) {
     await runTest(testCases[i], i)
     console.log('')
   }
-  
+
   console.log('=== Test Summary ===')
   console.log(`Passed: ${passed}`)
   console.log(`Failed: ${failed}`)
   console.log(`Total: ${testCases.length}`)
   console.log('')
-  
+
   if (failed === 0) {
     console.log('✓ All tests passed!')
     process.exit(0)
@@ -140,4 +138,3 @@ async function runAllTests() {
 }
 
 runAllTests()
-

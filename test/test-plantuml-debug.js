@@ -7,7 +7,6 @@
  */
 
 var plantumlExecutor = require('../lib/plantuml-executor')
-var javaResolver = require('../lib/java-resolver')
 var path = require('path')
 var fs = require('fs')
 
@@ -31,32 +30,32 @@ console.log('')
 if (fs.existsSync(javaExe) && fs.existsSync(plantumlJar)) {
   console.log('Testing direct Java execution...')
   var childProcess = require('child_process')
-  
+
   var testArgs = [
     '-Djava.awt.headless=true',
     '-Dfile.encoding=UTF-8',
     '-jar', plantumlJar,
     '-version'
   ]
-  
+
   console.log('Command:', javaExe, testArgs.join(' '))
-  
+
   var child = childProcess.spawn(javaExe, testArgs, {
     stdio: 'pipe',
     shell: true
   })
-  
+
   var stdout = []
   var stderr = []
-  
+
   child.stdout.on('data', function (chunk) {
     stdout.push(chunk)
   })
-  
+
   child.stderr.on('data', function (chunk) {
     stderr.push(chunk)
   })
-  
+
   child.on('close', function (code) {
     console.log('Exit code:', code)
     if (stdout.length > 0) {
@@ -66,10 +65,10 @@ if (fs.existsSync(javaExe) && fs.existsSync(plantumlJar)) {
       console.log('STDERR:', Buffer.concat(stderr).toString())
     }
     console.log('')
-    
+
     if (code === 0) {
       console.log('✓ PlantUML JAR works with local JRE')
-      
+
       // Now test actual generation
       console.log('')
       console.log('Testing PNG generation...')
@@ -79,7 +78,7 @@ if (fs.existsSync(javaExe) && fs.existsSync(plantumlJar)) {
       process.exit(1)
     }
   })
-  
+
   child.on('error', function (err) {
     console.error('✗ Error spawning process:', err.message)
     process.exit(1)
@@ -94,33 +93,33 @@ function testGeneration () {
   var options = {
     javaPath: javaExe
   }
-  
+
   var child = plantumlExecutor.exec(['-pipe'], undefined, options)
-  
+
   var stdout = []
   var stderr = []
-  
+
   child.stdout.on('data', function (chunk) {
     stdout.push(chunk)
     console.log('Received chunk:', chunk.length, 'bytes')
   })
-  
+
   child.stderr.on('data', function (chunk) {
     stderr.push(chunk)
     console.log('STDERR:', chunk.toString())
   })
-  
+
   child.on('error', function (err) {
     console.error('✗ Process error:', err.message)
     process.exit(1)
   })
-  
+
   child.on('close', function (code) {
     console.log('Exit code:', code)
     if (stdout.length > 0) {
       var buffer = Buffer.concat(stdout)
       console.log('Total output:', buffer.length, 'bytes')
-      
+
       if (buffer.length > 0) {
         var outputPath = path.join(__dirname, 'output', 'test-debug.png')
         var outputDir = path.dirname(outputPath)
@@ -135,16 +134,16 @@ function testGeneration () {
     } else {
       console.log('✗ No output received')
     }
-    
+
     if (stderr.length > 0) {
       console.log('STDERR:', Buffer.concat(stderr).toString())
     }
   })
-  
+
   // Write test code to stdin
   child.stdin.write(testCode, 'utf8')
   child.stdin.end()
-  
+
   setTimeout(function () {
     // Don't kill if already closed
     if (!child.killed) {
@@ -154,4 +153,3 @@ function testGeneration () {
     }
   }, 30000)
 }
-

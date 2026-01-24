@@ -65,7 +65,7 @@ child.on('close', function (code) {
   console.log('')
   console.log('Verifying JRE...')
   var javaExe = path.join(jrePath, 'bin', 'java.exe')
-  
+
   if (!fs.existsSync(javaExe)) {
     console.error('Error: Java executable not found at:', javaExe)
     process.exit(1)
@@ -102,4 +102,3 @@ child.on('error', function (err) {
   console.error('Error running jlink:', err.message)
   process.exit(1)
 })
-

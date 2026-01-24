@@ -6,8 +6,6 @@
  */
 
 var plantuml = require('../lib/node-plantuml')
-var fs = require('fs')
-var path = require('path')
 
 var testCases = [
   {
