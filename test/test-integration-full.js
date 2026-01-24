@@ -15,6 +15,7 @@ var dotResolver = require('../lib/dot-resolver')
 var fs = require('fs')
 var path = require('path')
 var os = require('os')
+var childProcess = require('child_process')
 
 console.log('')
 console.log('=== Comprehensive Integration Test ===')
@@ -45,7 +46,6 @@ try {
     logTest('JRE Detection', true, 'Found at: ' + javaPath)
     
     // Verify JRE works
-    var childProcess = require('child_process')
     try {
       childProcess.execSync('"' + javaPath + '" -version', {
         encoding: 'utf-8',
@@ -66,7 +66,6 @@ console.log('')
 // Test 2: Graphviz Detection
 console.log('Test 2: Graphviz Detection')
 console.log('---')
-var childProcess = require('child_process')
 try {
   var dotPath = dotResolver.resolveDotExecutable({ dotPath: null })
   if (dotPath) {
