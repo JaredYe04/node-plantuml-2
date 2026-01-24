@@ -167,7 +167,7 @@ if (systemDot) {
     var buildScript = path.join(__dirname, 'build-graphviz.js')
     console.log('Running build script...')
     
-    var buildResult = childProcess.execSync(
+    childProcess.execSync(
       'node "' + buildScript + '" ' + PLATFORM + ' ' + ARCH,
       { encoding: 'utf-8', stdio: 'inherit' }
     )

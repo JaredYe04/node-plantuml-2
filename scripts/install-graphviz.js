@@ -120,7 +120,6 @@ async function installOnLinux () {
 
   // Detect package manager
   var packageManager = null
-  var installCommand = null
   var packageName = 'graphviz'
 
   var installArgs = null
