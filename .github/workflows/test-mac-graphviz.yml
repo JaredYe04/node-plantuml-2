@@ -1,10 +1,10 @@
 name: Test Mac Graphviz Detection
 
 on:
-  push:
-    branches: [ main, master, develop ]
-  pull_request:
-    branches: [ main, master, develop ]
+  # push:
+  #   branches: [ main, master, develop ]
+  # pull_request:
+  #   branches: [ main, master, develop ]
   workflow_dispatch:
 
 jobs:
