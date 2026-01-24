@@ -71,13 +71,13 @@ jobs:
       - name: Install Graphviz (Chocolatey)
         shell: powershell
         run: |
-          Write-Host "📦 Installing Graphviz via Chocolatey..."
+          Write-Host "Installing Graphviz via Chocolatey..."
           if (Get-Command choco -ErrorAction SilentlyContinue) {
             choco install graphviz -y
           } elseif (Get-Command winget -ErrorAction SilentlyContinue) {
             winget install Graphviz.Graphviz --accept-package-agreements --accept-source-agreements
           } else {
-            Write-Host "⚠️  Neither Chocolatey nor Winget found, Graphviz may not be available"
+            Write-Host "Warning: Neither Chocolatey nor Winget found, Graphviz may not be available"
           }
 
       - name: Verify Graphviz installation
@@ -86,10 +86,10 @@ jobs:
           Write-Host "Verifying Graphviz installation..."
           $dotPath = Get-Command dot -ErrorAction SilentlyContinue
           if ($dotPath) {
-            Write-Host "✓ Graphviz found at: $($dotPath.Source)"
+            Write-Host "Graphviz found at: $($dotPath.Source)"
             & $dotPath.Source -V
           } else {
-            Write-Host "⚠️  Graphviz not found in PATH"
+            Write-Host "Warning: Graphviz not found in PATH"
           }
 
       - name: Install dependencies
