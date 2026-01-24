@@ -100,19 +100,70 @@ function findSystemDot () {
 
 /**
  * Copy file or directory recursively
+ * Handles symbolic links to avoid infinite loops
  */
+var visitedPaths = new Set()
+
 function copyRecursive (src, dest) {
-  var stat = fs.statSync(src)
-  if (stat.isDirectory()) {
-    if (!fs.existsSync(dest)) {
-      fs.mkdirSync(dest, { recursive: true })
+  // Normalize paths to avoid issues with different path formats
+  var normalizedSrc = path.resolve(src)
+  
+  // Check for circular references
+  if (visitedPaths.has(normalizedSrc)) {
+    console.log('Skipping circular reference:', src)
+    return
+  }
+  
+  visitedPaths.add(normalizedSrc)
+  
+  try {
+    // Use lstatSync to detect symlinks without following them
+    var stat = fs.lstatSync(src)
+    
+    if (stat.isSymbolicLink()) {
+      // Copy the symlink itself, don't follow it
+      var linkTarget = fs.readlinkSync(src)
+      if (!fs.existsSync(dest)) {
+        fs.symlinkSync(linkTarget, dest)
+      }
+      return
     }
-    var entries = fs.readdirSync(src)
-    for (var i = 0; i < entries.length; i++) {
-      copyRecursive(path.join(src, entries[i]), path.join(dest, entries[i]))
+    
+    if (stat.isDirectory()) {
+      // Skip known problematic directories
+      var basename = path.basename(src)
+      if (basename === 'X11' && src.includes('/usr/bin')) {
+        console.log('Skipping problematic X11 symlink directory:', src)
+        return
+      }
+      
+      if (!fs.existsSync(dest)) {
+        fs.mkdirSync(dest, { recursive: true })
+      }
+      var entries = fs.readdirSync(src)
+      for (var i = 0; i < entries.length; i++) {
+        var entrySrc = path.join(src, entries[i])
+        var entryDest = path.join(dest, entries[i])
+        copyRecursive(entrySrc, entryDest)
+      }
+    } else {
+      // Regular file
+      var destDir = path.dirname(dest)
+      if (!fs.existsSync(destDir)) {
+        fs.mkdirSync(destDir, { recursive: true })
+      }
+      fs.copyFileSync(src, dest)
     }
-  } else {
-    fs.copyFileSync(src, dest)
+  } catch (err) {
+    // If we can't access the file, skip it
+    if (err.code === 'ELOOP' || err.code === 'EACCES') {
+      console.log('Skipping inaccessible path:', src, err.message)
+      return
+    }
+    throw err
+  } finally {
+    // Remove from visited set after processing
+    visitedPaths.delete(normalizedSrc)
   }
 }
 
@@ -172,6 +223,7 @@ function buildGraphviz () {
     // Copy lib directory if exists
     if (fs.existsSync(libDir)) {
       console.log('Copying lib directory...')
+      visitedPaths.clear() // Reset visited paths for each directory
       var destLibDir = path.join(graphvizDir, 'lib')
       copyRecursive(libDir, destLibDir)
       console.log('✓ Copied lib directory')
@@ -181,6 +233,7 @@ function buildGraphviz () {
     var shareDir = path.join(graphvizInstallDir, 'share')
     if (fs.existsSync(shareDir)) {
       console.log('Copying share directory...')
+      visitedPaths.clear() // Reset visited paths for each directory
       var destShareDir = path.join(graphvizDir, 'share')
       copyRecursive(shareDir, destShareDir)
       console.log('✓ Copied share directory')
@@ -191,6 +244,7 @@ function buildGraphviz () {
       var etcDir = path.join(graphvizInstallDir, 'etc')
       if (fs.existsSync(etcDir)) {
         console.log('Copying etc directory...')
+        visitedPaths.clear() // Reset visited paths for each directory
         var destEtcDir = path.join(graphvizDir, 'etc')
         copyRecursive(etcDir, destEtcDir)
         console.log('✓ Copied etc directory')
