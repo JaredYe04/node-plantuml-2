@@ -276,25 +276,89 @@ function buildGraphviz () {
     console.log('✓ Found dot executable at:', dotPath)
 
     // Resolve dot path to actual file (follow symlinks)
+    // But verify it's actually the dot executable, not a config script
     var actualDotPath = dotPath
     try {
       var dotStat = fs.lstatSync(dotPath)
       if (dotStat.isSymbolicLink()) {
-        actualDotPath = fs.realpathSync(dotPath)
-        console.log('  Resolved symlink to:', actualDotPath)
+        var resolvedPath = fs.realpathSync(dotPath)
+        var resolvedBasename = path.basename(resolvedPath).toLowerCase()
+        
+        // Check if resolved path is actually dot or a graphviz executable
+        // If it's a config script or something else, try to find the real dot
+        if (resolvedBasename.includes('config') || 
+            resolvedBasename.includes('update') ||
+            (!resolvedBasename.startsWith('dot') && !resolvedBasename.includes('graphviz'))) {
+          console.log('  Warning: Resolved symlink points to non-dot file:', resolvedPath)
+          console.log('  Trying to find actual dot executable...')
+          
+          // Try to find dot in the same directory or parent directories
+          var possibleDotPaths = [
+            path.join(path.dirname(resolvedPath), 'dot'),
+            path.join(path.dirname(path.dirname(resolvedPath)), 'bin', 'dot'),
+            '/usr/bin/dot' // Fallback to original
+          ]
+          
+          for (var i = 0; i < possibleDotPaths.length; i++) {
+            if (fs.existsSync(possibleDotPaths[i])) {
+              var testStat = fs.statSync(possibleDotPaths[i])
+              if (testStat.isFile() && testStat.size > 1000) { // Should be at least 1KB
+                actualDotPath = possibleDotPaths[i]
+                console.log('  Found actual dot at:', actualDotPath)
+                break
+              }
+            }
+          }
+          
+          // If still not found, use original path but verify it's executable
+          if (actualDotPath === dotPath) {
+            // Check if original is actually executable
+            try {
+              var originalStat = fs.statSync(dotPath)
+              if (originalStat.isFile()) {
+                actualDotPath = dotPath
+                console.log('  Using original dot path:', actualDotPath)
+              }
+            } catch (e) {
+              console.log('  Error checking original dot:', e.message)
+            }
+          }
+        } else {
+          actualDotPath = resolvedPath
+          console.log('  Resolved symlink to:', actualDotPath)
+        }
+      } else if (dotStat.isFile()) {
+        // It's already a file, use it
+        actualDotPath = dotPath
+        console.log('  Dot is a regular file')
       }
     } catch (e) {
       console.log('  Warning: Could not resolve dot path, using as-is:', e.message)
+    }
+    
+    // Final verification: make sure the file exists and is reasonable size
+    try {
+      var finalStat = fs.statSync(actualDotPath)
+      if (!finalStat.isFile()) {
+        throw new Error('Dot path is not a regular file: ' + actualDotPath)
+      }
+      if (finalStat.size < 1000) {
+        console.log('  Warning: Dot file seems too small (' + finalStat.size + ' bytes), may not be correct')
+      }
+    } catch (e) {
+      throw new Error('Cannot access dot executable at: ' + actualDotPath + ' - ' + e.message)
     }
 
     // Get Graphviz installation directory from the actual dot path
     var actualDotDir = path.dirname(actualDotPath)
     var graphvizInstallDir = path.dirname(actualDotDir) // Go up from bin/
     
-    // Check if we're in a system directory (like /usr/bin)
+    // Check if we're in a system directory (like /usr/bin, /usr/sbin)
     // If so, try to find the actual Graphviz installation
     var isSystemBin = actualDotDir === '/usr/bin' || actualDotDir === '/usr/local/bin' || 
-                      actualDotDir.includes('/usr/bin') || actualDotDir.includes('/usr/local/bin')
+                      actualDotDir === '/usr/sbin' || actualDotDir === '/usr/local/sbin' ||
+                      actualDotDir.includes('/usr/bin') || actualDotDir.includes('/usr/local/bin') ||
+                      actualDotDir.includes('/usr/sbin') || actualDotDir.includes('/usr/local/sbin')
     
     var binDir = actualDotDir
     var libDir = null
@@ -302,16 +366,16 @@ function buildGraphviz () {
     
     if (isSystemBin) {
       // For system installations, only copy the dot executable itself
-      // Don't try to copy from /usr/bin as it contains many non-Graphviz files
+      // Don't try to copy from /usr/bin or /usr/sbin as they contain many non-Graphviz files
       console.log('  Detected system bin directory, will only copy Graphviz executables')
       binDir = actualDotDir
       
-      // Try to find Graphviz lib directory
+      // Try to find Graphviz lib directory (must be Graphviz-specific, not general /usr/lib)
       var possibleLibDirs = [
         '/usr/lib/graphviz',
         '/usr/lib/x86_64-linux-gnu/graphviz',
-        '/usr/local/lib/graphviz',
-        '/usr/lib64/graphviz'
+        '/usr/lib64/graphviz',
+        '/usr/local/lib/graphviz'
       ]
       for (var i = 0; i < possibleLibDirs.length; i++) {
         if (fs.existsSync(possibleLibDirs[i])) {
@@ -321,7 +385,37 @@ function buildGraphviz () {
         }
       }
       
-      // Try to find Graphviz share directory
+      // If no Graphviz-specific lib dir found, try to find Graphviz libraries in system lib
+      if (!libDir) {
+        var systemLibDirs = [
+          '/usr/lib/x86_64-linux-gnu',
+          '/usr/lib',
+          '/usr/lib64'
+        ]
+        for (var k = 0; k < systemLibDirs.length; k++) {
+          var sysLibDir = systemLibDirs[k]
+          if (fs.existsSync(sysLibDir)) {
+            try {
+              var entries = fs.readdirSync(sysLibDir)
+              // Look for Graphviz libraries
+              for (var m = 0; m < entries.length; m++) {
+                var entry = entries[m]
+                if (entry.startsWith('libgv') || entry.startsWith('libgraph') || 
+                    entry.startsWith('libgvc') || entry.includes('graphviz')) {
+                  // Found Graphviz libraries, but we'll copy them individually
+                  // Don't set libDir to the entire system lib directory
+                  console.log('  Found Graphviz libraries in:', sysLibDir)
+                  break
+                }
+              }
+            } catch (e) {
+              // Skip if can't read
+            }
+          }
+        }
+      }
+      
+      // Try to find Graphviz share directory (must be Graphviz-specific)
       var possibleShareDirs = [
         '/usr/share/graphviz',
         '/usr/local/share/graphviz'
@@ -525,11 +619,22 @@ function buildGraphviz () {
       console.log('Copying lib directory...')
       visitedPaths.clear() // Reset visited paths for each directory
       var destLibDir = path.join(graphvizDir, 'lib')
-      // For lib directory, we still filter but less strictly (only by size)
-      copyRecursive(libDir, destLibDir, { onlyGraphviz: false })
-      console.log('✓ Copied lib directory')
+      
+      // For system installations, libDir should already be Graphviz-specific
+      // But double-check to make sure we're not copying the entire /usr/lib
+      if (libDir === '/usr/lib' || libDir === '/usr/local/lib' || 
+          libDir === '/usr/lib/x86_64-linux-gnu' || libDir === '/usr/lib64') {
+        console.log('  Warning: libDir is system directory, this should not happen!')
+        console.log('  Skipping to avoid copying entire system library directory')
+        console.log('  Note: Graphviz will use system libraries at runtime')
+      } else {
+        // It's a Graphviz-specific directory, copy it
+        copyRecursive(libDir, destLibDir, { onlyGraphviz: false })
+        console.log('✓ Copied lib directory')
+      }
     } else {
       console.log('  Skipping lib directory (not found or not specified)')
+      console.log('  Note: Graphviz may use system libraries, which is fine')
     }
 
     // Copy share directory if exists (for config files, etc.)
@@ -537,20 +642,28 @@ function buildGraphviz () {
       console.log('Copying share directory...')
       visitedPaths.clear() // Reset visited paths for each directory
       var destShareDir = path.join(graphvizDir, 'share')
-      // For share directory, filter by Graphviz-related paths
-      var shareGraphvizDir = path.join(shareDir, 'graphviz')
-      if (fs.existsSync(shareGraphvizDir)) {
-        // Only copy graphviz subdirectory
-        copyRecursive(shareGraphvizDir, path.join(destShareDir, 'graphviz'), { onlyGraphviz: false })
+      
+      // For share directory, it should already be Graphviz-specific (e.g., /usr/share/graphviz)
+      // But double-check to make sure we're not copying the entire /usr/share
+      if (shareDir === '/usr/share' || shareDir === '/usr/local/share') {
+        console.log('  Warning: shareDir is system directory, looking for graphviz subdirectory...')
+        var shareGraphvizDir = path.join(shareDir, 'graphviz')
+        if (fs.existsSync(shareGraphvizDir)) {
+          // Only copy graphviz subdirectory
+          copyRecursive(shareGraphvizDir, path.join(destShareDir, 'graphviz'), { onlyGraphviz: false })
+        } else {
+          console.log('  Skipping: No graphviz subdirectory found in system share directory')
+        }
       } else {
-        // Copy entire share directory but with size limits
+        // It's already a Graphviz-specific directory, copy it
         copyRecursive(shareDir, destShareDir, { onlyGraphviz: false })
       }
       console.log('✓ Copied share directory')
     } else {
-      // Try default location if shareDir wasn't set
+      // Try default location if shareDir wasn't set, but only if it's Graphviz-specific
       var defaultShareDir = path.join(graphvizInstallDir, 'share')
-      if (fs.existsSync(defaultShareDir)) {
+      if (fs.existsSync(defaultShareDir) && !isSystemBin) {
+        // Only try default if it's not a system installation
         console.log('Copying share directory from default location...')
         visitedPaths.clear()
         var destShareDir = path.join(graphvizDir, 'share')
@@ -562,7 +675,7 @@ function buildGraphviz () {
         }
         console.log('✓ Copied share directory')
       } else {
-        console.log('  Skipping share directory (not found)')
+        console.log('  Skipping share directory (not found or system installation)')
       }
     }
 
