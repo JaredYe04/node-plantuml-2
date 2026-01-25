@@ -1,0 +1,404 @@
+name: Test External Installation
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+  workflow_dispatch:
+
+jobs:
+  test-external-install:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: [18.x, 20.x]
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      # Install Java (required for PlantUML)
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # Install Graphviz based on platform
+      - name: Install Graphviz (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y graphviz
+          dot -V
+
+      - name: Install Graphviz (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          echo "📦 Installing Graphviz via Homebrew..."
+          if ! command -v brew &> /dev/null; then
+            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          fi
+          
+          if [ -f /opt/homebrew/bin/brew ]; then
+            echo "/opt/homebrew/bin" >> $GITHUB_PATH
+          fi
+          
+          brew install graphviz || brew upgrade graphviz
+          dot -V
+
+      - name: Install Graphviz (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          Write-Host "Installing Graphviz via Chocolatey..."
+          if (Get-Command choco -ErrorAction SilentlyContinue) {
+            choco install graphviz -y
+          } elseif (Get-Command winget -ErrorAction SilentlyContinue) {
+            winget install Graphviz.Graphviz --accept-package-agreements --accept-source-agreements
+          } else {
+            Write-Host "Warning: Neither Chocolatey nor Winget found"
+          }
+          
+          $dotPath = Get-Command dot -ErrorAction SilentlyContinue
+          if ($dotPath) {
+            Write-Host "Graphviz found at: $($dotPath.Source)"
+            & $dotPath.Source -V
+          }
+
+      # Build the package locally (prepare for local installation)
+      - name: Install dependencies for build (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Install dependencies for build (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          if (Test-Path package-lock.json) {
+            npm ci
+          } else {
+            npm install
+          }
+
+      - name: Download PlantUML JAR
+        run: npm run build:all:jar-only || echo "JAR download failed, continuing..."
+
+      - name: Build package
+        run: npm run build || echo "No build script found, skipping"
+
+      # Create a temporary external project directory
+      - name: Create external test project (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p /tmp/external-test-project
+          cd /tmp/external-test-project
+          npm init -y
+          echo "Created test project at: $(pwd)"
+
+      - name: Create external test project (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path $env:TEMP\external-test-project | Out-Null
+          Set-Location $env:TEMP\external-test-project
+          npm init -y
+          Write-Host "Created test project at: $(Get-Location)"
+
+      # Install node-plantuml-2 from local path
+      - name: Install node-plantuml-2 from local path (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cd /tmp/external-test-project
+          npm install ${{ github.workspace }} --save
+          echo "Installed node-plantuml-2 from local path"
+
+      - name: Install node-plantuml-2 from local path (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          Set-Location $env:TEMP\external-test-project
+          npm install "${{ github.workspace }}" --save
+          Write-Host "Installed node-plantuml-2 from local path"
+
+      # Verify installation
+      - name: Verify installation (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cd /tmp/external-test-project
+          echo "=== Package.json ==="
+          cat package.json
+          echo ""
+          echo "=== Installed packages ==="
+          npm list node-plantuml-2 || echo "Package not found in list"
+          echo ""
+          echo "=== Node modules ==="
+          ls -la node_modules/node-plantuml-2/ || echo "node_modules/node-plantuml-2 not found"
+
+      - name: Verify installation (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          Set-Location $env:TEMP\external-test-project
+          Write-Host "=== Package.json ==="
+          Get-Content package.json
+          Write-Host ""
+          Write-Host "=== Installed packages ==="
+          npm list node-plantuml-2
+          Write-Host ""
+          Write-Host "=== Node modules ==="
+          if (Test-Path "node_modules\node-plantuml-2") {
+            Get-ChildItem "node_modules\node-plantuml-2"
+          } else {
+            Write-Host "node_modules\node-plantuml-2 not found"
+          }
+
+      # Create test script
+      - name: Create test script (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cd /tmp/external-test-project
+          cat > test-install.js << 'EOF'
+          #!/usr/bin/env node
+          'use strict'
+          
+          console.log('=== Testing node-plantuml-2 Installation ===')
+          console.log('')
+          
+          try {
+            var plantuml = require('node-plantuml-2')
+            console.log('✓ Module loaded successfully')
+            console.log('Available methods:', Object.keys(plantuml).join(', '))
+            console.log('')
+            
+            // Test 1: Check if generate method exists
+            if (typeof plantuml.generate === 'function') {
+              console.log('✓ generate() method exists')
+            } else {
+              console.log('✗ generate() method not found')
+              process.exit(1)
+            }
+            
+            // Test 2: Check if testdot method exists
+            if (typeof plantuml.testdot === 'function') {
+              console.log('✓ testdot() method exists')
+            } else {
+              console.log('✗ testdot() method not found')
+              process.exit(1)
+            }
+            
+            // Test 3: Try to generate a simple diagram
+            console.log('')
+            console.log('Testing PNG generation...')
+            var testCode = '@startuml\nAlice -> Bob: Hello\n@enduml'
+            var gen = plantuml.generate(testCode, { format: 'png' })
+            
+            var chunks = []
+            var hasError = false
+            
+            gen.out.on('data', function (chunk) {
+              chunks.push(chunk)
+            })
+            
+            gen.out.on('error', function (err) {
+              console.log('✗ Generation error:', err.message)
+              hasError = true
+            })
+            
+            gen.out.on('end', function () {
+              if (hasError) {
+                process.exit(1)
+              }
+              
+              var buffer = Buffer.concat(chunks)
+              if (buffer.length > 0) {
+                var isPng = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47
+                console.log('✓ PNG generated successfully')
+                console.log('  Size:', buffer.length, 'bytes')
+                console.log('  Valid PNG:', isPng ? 'Yes' : 'No')
+              } else {
+                console.log('✗ Empty output')
+                process.exit(1)
+              }
+              
+              console.log('')
+              console.log('✅ All tests passed!')
+              process.exit(0)
+            })
+            
+            setTimeout(function () {
+              if (chunks.length === 0 && !hasError) {
+                console.log('✗ Timeout waiting for output')
+                process.exit(1)
+              }
+            }, 30000)
+            
+          } catch (err) {
+            console.error('✗ Error loading module:', err.message)
+            console.error(err.stack)
+            process.exit(1)
+          }
+          EOF
+          chmod +x test-install.js
+          echo "Created test script"
+
+      - name: Create test script (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          Set-Location $env:TEMP\external-test-project
+          @"
+          #!/usr/bin/env node
+          'use strict'
+          
+          console.log('=== Testing node-plantuml-2 Installation ===')
+          console.log('')
+          
+          try {
+            var plantuml = require('node-plantuml-2')
+            console.log('✓ Module loaded successfully')
+            console.log('Available methods:', Object.keys(plantuml).join(', '))
+            console.log('')
+            
+            // Test 1: Check if generate method exists
+            if (typeof plantuml.generate === 'function') {
+              console.log('✓ generate() method exists')
+            } else {
+              console.log('✗ generate() method not found')
+              process.exit(1)
+            }
+            
+            // Test 2: Check if testdot method exists
+            if (typeof plantuml.testdot === 'function') {
+              console.log('✓ testdot() method exists')
+            } else {
+              console.log('✗ testdot() method not found')
+              process.exit(1)
+            }
+            
+            // Test 3: Try to generate a simple diagram
+            console.log('')
+            console.log('Testing PNG generation...')
+            var testCode = '@startuml\nAlice -> Bob: Hello\n@enduml'
+            var gen = plantuml.generate(testCode, { format: 'png' })
+            
+            var chunks = []
+            var hasError = false
+            
+            gen.out.on('data', function (chunk) {
+              chunks.push(chunk)
+            })
+            
+            gen.out.on('error', function (err) {
+              console.log('✗ Generation error:', err.message)
+              hasError = true
+            })
+            
+            gen.out.on('end', function () {
+              if (hasError) {
+                process.exit(1)
+              }
+              
+              var buffer = Buffer.concat(chunks)
+              if (buffer.length > 0) {
+                var isPng = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47
+                console.log('✓ PNG generated successfully')
+                console.log('  Size:', buffer.length, 'bytes')
+                console.log('  Valid PNG:', isPng ? 'Yes' : 'No')
+              } else {
+                console.log('✗ Empty output')
+                process.exit(1)
+              }
+              
+              console.log('')
+              console.log('✅ All tests passed!')
+              process.exit(0)
+            })
+            
+            setTimeout(function () {
+              if (chunks.length === 0 && !hasError) {
+                console.log('✗ Timeout waiting for output')
+                process.exit(1)
+              }
+            }, 30000)
+            
+          } catch (err) {
+            console.error('✗ Error loading module:', err.message)
+            console.error(err.stack)
+            process.exit(1)
+          }
+          "@ | Out-File -FilePath test-install.js -Encoding utf8
+          Write-Host "Created test script"
+
+      # Run the test
+      - name: Run installation test (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cd /tmp/external-test-project
+          node test-install.js
+
+      - name: Run installation test (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          Set-Location $env:TEMP\external-test-project
+          node test-install.js
+
+      # Additional comprehensive test
+      - name: Run comprehensive integration test (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cd /tmp/external-test-project
+          node -e "
+          var plantuml = require('node-plantuml-2');
+          var javaResolver = require('node-plantuml-2/lib/java-resolver');
+          var dotResolver = require('node-plantuml-2/lib/dot-resolver');
+          
+          console.log('=== Comprehensive Integration Test ===');
+          console.log('');
+          
+          // Test JRE detection
+          var javaPath = javaResolver.resolveJavaExecutable({});
+          console.log('JRE:', javaPath || 'NOT FOUND');
+          
+          // Test Graphviz detection
+          var dotPath = dotResolver.resolveDotExecutable({ dotPath: null });
+          console.log('Graphviz:', dotPath || 'NOT FOUND');
+          
+          // Test testdot
+          plantuml.testdot(function(isOk) {
+            console.log('testdot:', isOk ? 'OK' : 'FAILED');
+            process.exit(isOk ? 0 : 1);
+          });
+          "
+
+      - name: Run comprehensive integration test (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          Set-Location $env:TEMP\external-test-project
+          node -e "var plantuml = require('node-plantuml-2'); var javaResolver = require('node-plantuml-2/lib/java-resolver'); var dotResolver = require('node-plantuml-2/lib/dot-resolver'); console.log('=== Comprehensive Integration Test ==='); console.log(''); var javaPath = javaResolver.resolveJavaExecutable({}); console.log('JRE:', javaPath || 'NOT FOUND'); var dotPath = dotResolver.resolveDotExecutable({ dotPath: null }); console.log('Graphviz:', dotPath || 'NOT FOUND'); plantuml.testdot(function(isOk) { console.log('testdot:', isOk ? 'OK' : 'FAILED'); process.exit(isOk ? 0 : 1); });"
+
