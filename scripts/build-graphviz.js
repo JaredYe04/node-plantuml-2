@@ -257,7 +257,92 @@ function copyRecursive (src, dest, options) {
 }
 
 /**
+ * Recursively find all dependencies of a library using ldd (Linux only)
+ * @param {string} libPath - Path to the library
+ * @param {Set} visited - Set of already visited libraries (to avoid cycles)
+ * @param {string[]} skipLibraries - List of system libraries to skip
+ * @returns {string[]} - Array of dependency paths
+ */
+function findLibraryDependencies (libPath, visited, skipLibraries) {
+  var dependencies = []
+  visited = visited || new Set()
+  skipLibraries = skipLibraries || []
+  
+  // Check if file exists
+  if (!fs.existsSync(libPath)) {
+    return dependencies
+  }
+  
+  // Normalize path to avoid duplicates (handle symlinks)
+  var normalizedPath
+  try {
+    normalizedPath = fs.realpathSync(libPath)
+  } catch (e) {
+    // If realpath fails, use the original path
+    normalizedPath = path.resolve(libPath)
+  }
+  
+  if (visited.has(normalizedPath)) {
+    return dependencies
+  }
+  visited.add(normalizedPath)
+  
+  try {
+    var lddOutput = childProcess.execSync('ldd "' + libPath + '"', { 
+      encoding: 'utf-8',
+      maxBuffer: 10 * 1024 * 1024 // 10MB buffer for large dependency lists
+    })
+    var lines = lddOutput.split('\n')
+    
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim()
+      if (!line) continue
+      
+      // Skip lines that indicate missing libraries
+      if (line.includes('not found') || line.includes('No such file')) {
+        continue
+      }
+      
+      // Parse ldd output format: "libname => /path/to/lib (0x...)" or "/path/to/lib (0x...)"
+      var match = line.match(/=>\s+(.+?)\s+\(/i) || line.match(/^\s*(.+?)\s+\(/)
+      if (match) {
+        var depPath = match[1].trim()
+        
+        // Skip if it's a system library
+        var shouldSkip = false
+        for (var j = 0; j < skipLibraries.length; j++) {
+          if (depPath.includes(skipLibraries[j])) {
+            shouldSkip = true
+            break
+          }
+        }
+        
+        // Skip if it's not an absolute path or doesn't exist
+        if (shouldSkip || !path.isAbsolute(depPath) || !fs.existsSync(depPath)) {
+          continue
+        }
+        
+        // Recursively find dependencies of this dependency
+        var subDeps = findLibraryDependencies(depPath, visited, skipLibraries)
+        dependencies = dependencies.concat(subDeps)
+        
+        // Add this dependency if not already in the list
+        if (dependencies.indexOf(depPath) === -1) {
+          dependencies.push(depPath)
+        }
+      }
+    }
+  } catch (e) {
+    // Some libraries might not have dependencies or ldd might fail, that's OK
+    // This can happen with statically linked libraries or invalid library files
+  }
+  
+  return dependencies
+}
+
+/**
  * Find and copy all dependencies of an executable using ldd (Linux only)
+ * Recursively finds dependencies of dependencies
  * @param {string} executablePath - Path to the executable
  * @param {string} destLibDir - Destination lib directory
  * @returns {number} - Number of libraries copied
@@ -268,10 +353,7 @@ function copyDependenciesWithLdd (executablePath, destLibDir) {
   }
 
   try {
-    console.log('  Finding dependencies using ldd...')
-    var lddOutput = childProcess.execSync('ldd "' + executablePath + '"', { encoding: 'utf-8' })
-    var dependencies = []
-    var lines = lddOutput.split('\n')
+    console.log('  Finding all dependencies using ldd (recursive)...')
     
     // System libraries to skip (these are part of the OS and shouldn't be copied)
     var skipLibraries = [
@@ -285,43 +367,13 @@ function copyDependenciesWithLdd (executablePath, destLibDir) {
       'ld-linux'
     ]
     
-    for (var i = 0; i < lines.length; i++) {
-      var line = lines[i].trim()
-      if (!line) continue
-      
-      // Parse ldd output format: "libname => /path/to/lib (0x...)" or "/path/to/lib (0x...)"
-      var match = line.match(/=>\s+(.+?)\s+\(/i) || line.match(/^\s*(.+?)\s+\(/)
-      if (match) {
-        var libPath = match[1].trim()
-        
-        // Skip if it's a system library
-        var shouldSkip = false
-        for (var j = 0; j < skipLibraries.length; j++) {
-          if (libPath.includes(skipLibraries[j])) {
-            shouldSkip = true
-            break
-          }
-        }
-        
-        // Skip if it's not an absolute path or doesn't exist
-        if (shouldSkip || !path.isAbsolute(libPath) || !fs.existsSync(libPath)) {
-          continue
-        }
-        
-        // Skip if it's already in our lib directory (Graphviz libraries we already copied)
-        var libBasename = path.basename(libPath)
-        var alreadyCopied = fs.existsSync(path.join(destLibDir, libBasename))
-        if (alreadyCopied) {
-          continue
-        }
-        
-        dependencies.push(libPath)
-      }
-    }
+    // Recursively find all dependencies
+    var visited = new Set()
+    var allDependencies = findLibraryDependencies(executablePath, visited, skipLibraries)
     
-    console.log('  Found', dependencies.length, 'dependencies to copy')
+    console.log('  Found', allDependencies.length, 'total dependencies (including transitive)')
     
-    if (dependencies.length === 0) {
+    if (allDependencies.length === 0) {
       return 0
     }
     
@@ -332,11 +384,17 @@ function copyDependenciesWithLdd (executablePath, destLibDir) {
     
     var copiedCount = 0
     var failedCount = 0
+    var copiedFiles = new Set() // Track copied files to avoid duplicates
     
-    for (var k = 0; k < dependencies.length; k++) {
-      var depPath = dependencies[k]
+    for (var k = 0; k < allDependencies.length; k++) {
+      var depPath = allDependencies[k]
       var depBasename = path.basename(depPath)
       var destPath = path.join(destLibDir, depBasename)
+      
+      // Skip if already copied
+      if (copiedFiles.has(depBasename)) {
+        continue
+      }
       
       try {
         // Check if it's a symlink
@@ -350,20 +408,22 @@ function copyDependenciesWithLdd (executablePath, destLibDir) {
             
             // Copy the actual library file (target of symlink) if not already copied
             var targetCopied = false
-            if (!fs.existsSync(resolvedDestPath)) {
+            if (!fs.existsSync(resolvedDestPath) && !copiedFiles.has(resolvedBasename)) {
               fs.copyFileSync(resolvedPath, resolvedDestPath)
               console.log('  ✓ Copied dependency:', resolvedBasename, '(target of', depBasename + ')')
               copiedCount++
+              copiedFiles.add(resolvedBasename)
               targetCopied = true
             }
             
             // Also create a symlink with the original name if names are different
             // This ensures libraries can be found by their soname (e.g., libcairo.so.2)
-            if (depBasename !== resolvedBasename && !fs.existsSync(destPath)) {
+            if (depBasename !== resolvedBasename && !fs.existsSync(destPath) && !copiedFiles.has(depBasename)) {
               try {
                 // Create a symlink pointing to the actual file
                 fs.symlinkSync(resolvedBasename, destPath)
                 console.log('  ✓ Created symlink:', depBasename, '->', resolvedBasename)
+                copiedFiles.add(depBasename)
                 // Don't increment copiedCount for symlink, only for actual file
               } catch (symlinkErr) {
                 // If symlink creation fails, just copy the file as fallback
@@ -371,6 +431,7 @@ function copyDependenciesWithLdd (executablePath, destLibDir) {
                   fs.copyFileSync(resolvedPath, destPath)
                   console.log('  ✓ Copied dependency:', depBasename, '(as file, symlink failed)')
                   copiedCount++
+                  copiedFiles.add(depBasename)
                 }
               }
             }
@@ -380,10 +441,11 @@ function copyDependenciesWithLdd (executablePath, destLibDir) {
           }
         } else {
           // Regular file, copy it
-          if (!fs.existsSync(destPath)) {
+          if (!fs.existsSync(destPath) && !copiedFiles.has(depBasename)) {
             fs.copyFileSync(depPath, destPath)
             console.log('  ✓ Copied dependency:', depBasename)
             copiedCount++
+            copiedFiles.add(depBasename)
           }
         }
       } catch (e) {
@@ -392,7 +454,7 @@ function copyDependenciesWithLdd (executablePath, destLibDir) {
       }
     }
     
-    console.log('✓ Copied', copiedCount, 'dependencies')
+    console.log('✓ Copied', copiedCount, 'unique dependencies')
     if (failedCount > 0) {
       console.log('⚠️  Failed to copy', failedCount, 'dependencies')
     }
