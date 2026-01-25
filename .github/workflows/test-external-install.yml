@@ -796,7 +796,94 @@ jobs:
         shell: powershell
         run: |
           Set-Location $env:TEMP\external-test-project
-          node -e "var plantuml = require('node-plantuml-2'); var javaResolver = require('node-plantuml-2/lib/java-resolver'); var dotResolver = require('node-plantuml-2/lib/dot-resolver'); console.log('=== Comprehensive Integration Test ==='); console.log(''); var javaPath = javaResolver.resolveJavaExecutable({}); console.log('JRE:', javaPath || 'NOT FOUND'); var dotPath = dotResolver.resolveDotExecutable({ dotPath: null }); console.log('Graphviz:', dotPath || 'NOT FOUND'); plantuml.testdot(function(isOk) { console.log('testdot:', isOk ? 'OK' : 'FAILED'); process.exit(isOk ? 0 : 1); });"
+          node -e "
+          var plantuml = require('node-plantuml-2');
+          var javaResolver = require('node-plantuml-2/lib/java-resolver');
+          var dotResolver = require('node-plantuml-2/lib/dot-resolver');
+          var childProcess = require('child_process');
+          var path = require('path');
+          var os = require('os');
+          
+          console.log('=== Comprehensive Integration Test ===');
+          console.log('');
+          
+          // Test JRE detection
+          var javaPath = javaResolver.resolveJavaExecutable({});
+          console.log('JRE:', javaPath || 'NOT FOUND');
+          
+          // Test Graphviz detection
+          var dotPath = dotResolver.resolveDotExecutable({ dotPath: null });
+          console.log('Graphviz:', dotPath || 'NOT FOUND');
+          
+          if (dotPath) {
+            // Test if dot can be executed directly with PATH
+            try {
+              var dotDir = path.dirname(dotPath);
+              var env = Object.assign({}, process.env);
+              // Add dot directory to PATH for Windows
+              if (os.platform() === 'win32') {
+                var binDir = dotDir.replace(/\//g, '\\');
+                env.PATH = binDir + ';' + (env.PATH || '');
+                console.log('Added to PATH:', binDir);
+                console.log('Full PATH (first 200 chars):', env.PATH.substring(0, 200));
+              }
+              
+              // Test dot with PATH
+              var dotVersion = childProcess.execSync('\"' + dotPath + '\" -V', {
+                encoding: 'utf-8',
+                env: env,
+                stdio: ['ignore', 'pipe', 'pipe']
+              });
+              console.log('[OK] Dot version check passed');
+            } catch (e) {
+              console.log('[FAIL] Dot version check failed');
+              console.log('Error:', e.message);
+            }
+            
+            // Test dot with a simple graph to verify output format
+            try {
+              var testGraph = 'digraph G { A -> B }';
+              var tempFile = require('os').tmpdir() + '\\test-graph.dot';
+              require('fs').writeFileSync(tempFile, testGraph, 'utf8');
+              
+              var dotOutput = childProcess.execSync('\"' + dotPath + '\" -Tpng \"' + tempFile + '\"', {
+                encoding: 'buffer',
+                env: env,
+                stdio: ['ignore', 'pipe', 'pipe'],
+                maxBuffer: 10 * 1024 * 1024
+              });
+              
+              // Check if output is valid PNG
+              var isPng = dotOutput.length > 8 && 
+                          dotOutput[0] === 0x89 && 
+                          dotOutput[1] === 0x50 && 
+                          dotOutput[2] === 0x4E && 
+                          dotOutput[3] === 0x47;
+              
+              if (isPng) {
+                console.log('[OK] Dot can generate valid PNG output (' + dotOutput.length + ' bytes)');
+              } else {
+                console.log('[WARN] Dot output may not be valid PNG');
+              }
+              
+              require('fs').unlinkSync(tempFile);
+            } catch (e) {
+              console.log('[WARN] Could not test dot PNG generation:', e.message);
+            }
+          }
+          
+          // Test testdot
+          console.log('');
+          console.log('Testing PlantUML testdot...');
+          plantuml.testdot(function(isOk) {
+            console.log('testdot:', isOk ? 'OK' : 'FAILED');
+            if (!isOk) {
+              console.log('⚠️  Graphviz integration test failed');
+              console.log('This may indicate a problem with Graphviz configuration or version compatibility');
+            }
+            process.exit(isOk ? 0 : 1);
+          });
+          "
 
       # Upload generated images as artifacts for manual inspection
       - name: Prepare images for upload (Windows)
