@@ -721,13 +721,13 @@ jobs:
             $testGraph = "digraph G { A -> B }"
             $testOutput = $testGraph | & $dotPath.Source -Tpng 2>&1
             if ($LASTEXITCODE -eq 0) {
-              Write-Host "✓ Graphviz dot command works correctly"
+              Write-Host "[OK] Graphviz dot command works correctly"
             } else {
-              Write-Host "✗ Graphviz dot command failed"
+              Write-Host "[FAIL] Graphviz dot command failed"
               Write-Host "Error: $testOutput"
             }
           } else {
-            Write-Host "⚠️  Graphviz not found in PATH"
+            Write-Host "[WARN] Graphviz not found in PATH"
           }
 
       - name: Run installation test (Windows)
