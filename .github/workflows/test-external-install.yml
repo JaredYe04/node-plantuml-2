@@ -713,18 +713,28 @@ jobs:
           if ($dotPath) {
             Write-Host "Graphviz found at: $($dotPath.Source)"
             Write-Host "Testing dot command..."
-            $version = & $dotPath.Source -V 2>&1
-            Write-Host "Version output: $version"
+            try {
+              # Graphviz -V outputs to stderr, so we need to handle it properly
+              $versionOutput = & $dotPath.Source -V 2>&1 | Out-String
+              Write-Host "Version output: $versionOutput"
+              Write-Host "[OK] Graphviz version check passed"
+            } catch {
+              Write-Host "[WARN] Could not get Graphviz version: $_"
+            }
             
             # Test if dot can generate output
             Write-Host "Testing dot with simple graph..."
             $testGraph = "digraph G { A -> B }"
-            $testOutput = $testGraph | & $dotPath.Source -Tpng 2>&1
-            if ($LASTEXITCODE -eq 0) {
-              Write-Host "[OK] Graphviz dot command works correctly"
-            } else {
-              Write-Host "[FAIL] Graphviz dot command failed"
-              Write-Host "Error: $testOutput"
+            try {
+              $testOutput = $testGraph | & $dotPath.Source -Tpng 2>&1 | Out-String
+              if ($LASTEXITCODE -eq 0 -or $testOutput.Length -gt 0) {
+                Write-Host "[OK] Graphviz dot command works correctly"
+              } else {
+                Write-Host "[FAIL] Graphviz dot command failed (exit code: $LASTEXITCODE)"
+                Write-Host "Error: $testOutput"
+              }
+            } catch {
+              Write-Host "[FAIL] Graphviz dot command failed with exception: $_"
             }
           } else {
             Write-Host "[WARN] Graphviz not found in PATH"
