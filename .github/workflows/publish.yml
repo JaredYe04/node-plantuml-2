@@ -825,63 +825,118 @@ jobs:
           # Ensure output directory exists
           mkdir -p "$TEST_OUTPUT_DIR" || true
           
+          # Clear any existing test files
+          rm -f "$TEST_FILE" "$TEST_ERROR_FILE" || true
+          
+          # Debug: Show environment
+          echo "Debug info:"
+          echo "  DOT_EXE: $DOT_EXE"
+          echo "  TEST_FILE: $TEST_FILE"
+          echo "  TEST_ERROR_FILE: $TEST_ERROR_FILE"
+          echo "  TEST_OUTPUT_DIR: $TEST_OUTPUT_DIR"
+          echo "  Current directory: $(pwd)"
+          echo "  PATH: $PATH"
+          if [ "${{ matrix.platform }}" = "win32" ]; then
+            echo "  BIN_DIR: $BIN_DIR"
+            echo "  Files in BIN_DIR:"
+            ls -la "$BIN_DIR" 2>&1 | head -10 || echo "  (cannot list)"
+          fi
+          echo ""
+          
           # Run dot command and capture both stdout and stderr
+          echo "Running: echo \"...\" | \"$DOT_EXE\" -Tpng > \"$TEST_FILE\" 2>\"$TEST_ERROR_FILE\""
           echo "$TEST_GRAPH" | "$DOT_EXE" -Tpng > "$TEST_FILE" 2>"$TEST_ERROR_FILE"
           DOT_EXIT_CODE=$?
           
+          echo "Dot command exit code: $DOT_EXIT_CODE"
+          echo "Output file exists: $([ -f "$TEST_FILE" ] && echo "yes" || echo "no")"
+          echo "Error file exists: $([ -f "$TEST_ERROR_FILE" ] && echo "yes" || echo "no")"
+          
           if [ $DOT_EXIT_CODE -ne 0 ]; then
+            echo ""
             echo "❌ Test 1 failed: dot command returned error (exit code: $DOT_EXIT_CODE)"
-            echo "Command: echo \"...\" | \"$DOT_EXE\" -Tpng > \"$TEST_FILE\" 2>\"$TEST_ERROR_FILE\""
-            echo "Output file exists: $([ -f "$TEST_FILE" ] && echo "yes" || echo "no")"
-            echo "Error file exists: $([ -f "$TEST_ERROR_FILE" ] && echo "yes" || echo "no")"
+            echo ""
             
+            # Check error file
             if [ -f "$TEST_ERROR_FILE" ]; then
-              ERROR_SIZE=$(wc -c < "$TEST_ERROR_FILE" 2>/dev/null || echo "0")
+              # Get error file size (compatible with Windows)
+              if command -v wc >/dev/null 2>&1; then
+                ERROR_SIZE=$(wc -c < "$TEST_ERROR_FILE" 2>/dev/null || echo "0")
+              else
+                # Fallback for Windows if wc is not available
+                if [ -s "$TEST_ERROR_FILE" ]; then
+                  ERROR_SIZE=">0"
+                else
+                  ERROR_SIZE="0"
+                fi
+              fi
               echo "Error file size: $ERROR_SIZE bytes"
-              if [ "$ERROR_SIZE" -gt 0 ]; then
-                echo "Error output:"
+              
+              if [ -s "$TEST_ERROR_FILE" ]; then
+                echo ""
+                echo "=== Error output ==="
                 cat "$TEST_ERROR_FILE"
+                echo "=== End error output ==="
+                echo ""
               else
                 echo "Error file is empty"
-                # Try to get error from output file if it contains error text
-                if [ -f "$TEST_FILE" ] && [ -s "$TEST_FILE" ]; then
-                  echo "Checking if output file contains error message..."
-                  head -20 "$TEST_FILE" | grep -i "error\|exception\|failed" || echo "No error text found in output"
-                fi
               fi
               
               # Check for common dependency errors
-              if [ "$ERROR_SIZE" -gt 0 ] && grep -q "cannot open shared object file\|No such file\|not found\|error while loading shared libraries\|The specified module could not be found\|DLL" "$TEST_ERROR_FILE" 2>/dev/null; then
-                echo ""
-                echo "⚠️  This appears to be a missing dependency/library issue"
-                if [ "${{ matrix.platform }}" = "linux" ] && [ -d "$LIB_DIR" ]; then
-                  echo "Lib directory: $LIB_DIR"
-                  echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
-                  echo "Library files in lib directory:"
-                  ls -lh "$LIB_DIR" | head -20 || true
+              if [ -s "$TEST_ERROR_FILE" ]; then
+                if grep -q "cannot open shared object file\|No such file\|not found\|error while loading shared libraries\|The specified module could not be found\|DLL\|LoadLibrary\|GetProcAddress" "$TEST_ERROR_FILE" 2>/dev/null; then
                   echo ""
-                  echo "Checking ldd output for dot executable:"
-                  ldd "$DOT_EXE" 2>&1 | head -30 || true
-                elif [ "${{ matrix.platform }}" = "win32" ]; then
-                  echo "Windows DLL issue detected"
-                  echo "PATH: $PATH"
-                  echo "Bin directory: $BIN_DIR"
-                  echo "Files in bin directory:"
-                  ls -la "$BIN_DIR" | head -20 || true
-                  echo ""
-                  echo "Checking for common DLL files:"
-                  for dll in libgvc.dll libgraph.dll libcdt.dll libcgraph.dll; do
-                    if [ -f "$BIN_DIR/$dll" ]; then
-                      echo "  ✓ Found: $dll"
-                    else
-                      echo "  ✗ Missing: $dll"
-                    fi
-                  done
+                  echo "⚠️  This appears to be a missing dependency/library issue"
+                  if [ "${{ matrix.platform }}" = "linux" ] && [ -d "$LIB_DIR" ]; then
+                    echo "Lib directory: $LIB_DIR"
+                    echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+                    echo "Library files in lib directory:"
+                    ls -lh "$LIB_DIR" | head -20 || true
+                    echo ""
+                    echo "Checking ldd output for dot executable:"
+                    ldd "$DOT_EXE" 2>&1 | head -30 || true
+                  elif [ "${{ matrix.platform }}" = "win32" ]; then
+                    echo ""
+                    echo "Windows DLL issue detected"
+                    echo "PATH: $PATH"
+                    echo "Bin directory: $BIN_DIR"
+                    echo "Files in bin directory:"
+                    ls -la "$BIN_DIR" 2>&1 | head -20 || echo "  (cannot list)"
+                    echo ""
+                    echo "Checking for common DLL files:"
+                    for dll in libgvc.dll libgraph.dll libcdt.dll libcgraph.dll libpathplan.dll libgvplugin_core.dll libgvplugin_dot_layout.dll; do
+                      if [ -f "$BIN_DIR/$dll" ]; then
+                        echo "  ✓ Found: $dll"
+                      else
+                        echo "  ✗ Missing: $dll"
+                      fi
+                    done
+                    echo ""
+                    echo "Trying to run dot with explicit PATH:"
+                    PATH="$BIN_DIR:$PATH" "$DOT_EXE" -V 2>&1 || echo "  Failed"
+                  fi
                 fi
               fi
             else
-              echo "Error file was not created"
+              echo "Error file was not created at: $TEST_ERROR_FILE"
             fi
+            
+            # Check if output file contains error text
+            if [ -f "$TEST_FILE" ] && [ -s "$TEST_FILE" ]; then
+              echo ""
+              echo "Checking if output file contains error message..."
+              if command -v head >/dev/null 2>&1; then
+                head -20 "$TEST_FILE" | grep -i "error\|exception\|failed" || echo "No error text found in output"
+              fi
+            fi
+            
+            echo ""
+            echo "Full diagnostic information:"
+            echo "  Working directory: $(pwd)"
+            echo "  Test output directory: $TEST_OUTPUT_DIR"
+            echo "  Directory contents:"
+            ls -la "$TEST_OUTPUT_DIR" 2>&1 || echo "  (cannot list)"
+            
             exit 1
           fi
           
@@ -901,10 +956,31 @@ jobs:
           fi
           
           # File exists and has content, proceed with validation
-          SIZE=$(wc -c < "$TEST_FILE" || echo "0")
-          if [ "$SIZE" -lt 500 ]; then
+          # Get file size (compatible with Windows)
+          if command -v wc >/dev/null 2>&1; then
+            SIZE=$(wc -c < "$TEST_FILE" 2>/dev/null || echo "0")
+          elif [ "${{ matrix.platform }}" = "win32" ] && command -v powershell >/dev/null 2>&1; then
+            # Windows fallback using PowerShell
+            SIZE=$(powershell -Command "(Get-Item '$TEST_FILE').Length" 2>/dev/null || echo "0")
+          else
+            # Last resort: check if file is non-empty
+            if [ -s "$TEST_FILE" ]; then
+              SIZE=">0"
+            else
+              SIZE="0"
+            fi
+          fi
+          
+          # Validate size (skip if we couldn't get exact size)
+          if [ "$SIZE" != ">0" ] && [ "$SIZE" -lt 500 ] 2>/dev/null; then
             echo "❌ Test 1 failed: Image too small ($SIZE bytes)"
             exit 1
+          fi
+          
+          if [ "$SIZE" = ">0" ]; then
+            echo "  File size check: file is non-empty"
+          else
+            echo "  File size: $SIZE bytes"
           fi
           
           # Check PNG signature using file command (if available) or simple byte check
@@ -968,6 +1044,8 @@ jobs:
           TEST_FILE2="$TEST_OUTPUT_DIR/test-2-complex.png"
           TEST_ERROR_FILE2="$TEST_OUTPUT_DIR/test-2-error.txt"
           
+          rm -f "$TEST_FILE2" "$TEST_ERROR_FILE2" || true
+          
           echo "$TEST_GRAPH2" | "$DOT_EXE" -Tpng > "$TEST_FILE2" 2>"$TEST_ERROR_FILE2"
           DOT_EXIT_CODE=$?
           
@@ -982,11 +1060,23 @@ jobs:
           
           if [ ! -f "$TEST_FILE2" ] || [ ! -s "$TEST_FILE2" ]; then
             echo "❌ Test 2 failed: No output file or file is empty"
+            if [ -f "$TEST_ERROR_FILE2" ] && [ -s "$TEST_ERROR_FILE2" ]; then
+              echo "Error output:"
+              cat "$TEST_ERROR_FILE2"
+            fi
             exit 1
           fi
           
-          SIZE=$(wc -c < "$TEST_FILE2" || echo "0")
-          if [ "$SIZE" -lt 500 ]; then
+          # Get file size (compatible with Windows)
+          if command -v wc >/dev/null 2>&1; then
+            SIZE=$(wc -c < "$TEST_FILE2" 2>/dev/null || echo "0")
+          elif [ "${{ matrix.platform }}" = "win32" ] && command -v powershell >/dev/null 2>&1; then
+            SIZE=$(powershell -Command "(Get-Item '$TEST_FILE2').Length" 2>/dev/null || echo "0")
+          else
+            SIZE=">0"
+          fi
+          
+          if [ "$SIZE" != ">0" ] && [ "$SIZE" -lt 500 ] 2>/dev/null; then
             echo "❌ Test 2 failed: Image too small ($SIZE bytes)"
             exit 1
           fi
@@ -998,6 +1088,8 @@ jobs:
           TEST_GRAPH3="digraph G { X -> Y; }"
           TEST_FILE3="$TEST_OUTPUT_DIR/test-3-svg.svg"
           TEST_ERROR_FILE3="$TEST_OUTPUT_DIR/test-3-error.txt"
+          
+          rm -f "$TEST_FILE3" "$TEST_ERROR_FILE3" || true
           
           echo "$TEST_GRAPH3" | "$DOT_EXE" -Tsvg > "$TEST_FILE3" 2>"$TEST_ERROR_FILE3"
           DOT_EXIT_CODE=$?
@@ -1013,17 +1105,29 @@ jobs:
           
           if [ ! -f "$TEST_FILE3" ] || [ ! -s "$TEST_FILE3" ]; then
             echo "❌ Test 3 failed: No output file or file is empty"
+            if [ -f "$TEST_ERROR_FILE3" ] && [ -s "$TEST_ERROR_FILE3" ]; then
+              echo "Error output:"
+              cat "$TEST_ERROR_FILE3"
+            fi
             exit 1
           fi
           
-          SIZE=$(wc -c < "$TEST_FILE3" || echo "0")
-          if [ "$SIZE" -lt 200 ]; then
+          # Get file size (compatible with Windows)
+          if command -v wc >/dev/null 2>&1; then
+            SIZE=$(wc -c < "$TEST_FILE3" 2>/dev/null || echo "0")
+          elif [ "${{ matrix.platform }}" = "win32" ] && command -v powershell >/dev/null 2>&1; then
+            SIZE=$(powershell -Command "(Get-Item '$TEST_FILE3').Length" 2>/dev/null || echo "0")
+          else
+            SIZE=">0"
+          fi
+          
+          if [ "$SIZE" != ">0" ] && [ "$SIZE" -lt 200 ] 2>/dev/null; then
             echo "❌ Test 3 failed: SVG too small ($SIZE bytes)"
             exit 1
           fi
           
           # Check SVG signature
-          if ! grep -q "<svg" "$TEST_FILE3"; then
+          if ! grep -q "<svg" "$TEST_FILE3" 2>/dev/null; then
             echo "❌ Test 3 failed: Invalid SVG format (no <svg> tag found)"
             exit 1
           fi

@@ -950,10 +950,10 @@ function buildGraphviz () {
           console.log('✓ Copied', depsCopied, 'system dependencies')
         } else {
           console.log('  ⚠️  Warning: No dependencies copied - Graphviz may not work without system libraries')
-        }
-      } else {
-        console.log('  Skipping lib directory (not found or not specified)')
-        console.log('  Note: Graphviz may use system libraries, which is fine')
+      }
+    } else {
+      console.log('  Skipping lib directory (not found or not specified)')
+      console.log('  Note: Graphviz may use system libraries, which is fine')
       }
     }
 
