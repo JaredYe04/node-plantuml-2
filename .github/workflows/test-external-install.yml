@@ -173,86 +173,209 @@ jobs:
             Write-Host "node_modules\node-plantuml-2 not found"
           }
 
-      # Create test script
+      # Create test script with image validation
       - name: Create test script (Unix)
         if: runner.os != 'Windows'
         shell: bash
         run: |
           cd /tmp/external-test-project
+          mkdir -p test-output
           cat > test-install.js << 'EOF'
           #!/usr/bin/env node
           'use strict'
           
+          var fs = require('fs')
+          var path = require('path')
+          
           console.log('=== Testing node-plantuml-2 Installation ===')
           console.log('')
           
+          var testResults = []
+          var outputDir = path.join(__dirname, 'test-output')
+          
+          function logTest(name, passed, message) {
+            var status = passed ? '✓' : '✗'
+            console.log(status, name + (message ? ': ' + message : ''))
+            testResults.push({ name: name, passed: passed, message: message })
+          }
+          
+          function validateImage(buffer, minSize, testName) {
+            if (buffer.length === 0) {
+              logTest(testName, false, 'Empty output')
+              return false
+            }
+            
+            // Check PNG signature
+            var isPng = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47
+            if (!isPng) {
+              logTest(testName, false, 'Invalid PNG signature')
+              return false
+            }
+            
+            // Check minimum size (too small might indicate error image)
+            if (buffer.length < minSize) {
+              logTest(testName, false, 'Image too small (' + buffer.length + ' bytes, expected at least ' + minSize + ')')
+              return false
+            }
+            
+            // Check for common error indicators in PNG
+            var bufferStr = buffer.toString('utf-8', 0, Math.min(1000, buffer.length))
+            if (bufferStr.includes('ERROR') || bufferStr.includes('Error') || bufferStr.includes('Exception')) {
+              logTest(testName, false, 'Error message detected in image')
+              return false
+            }
+            
+            logTest(testName, true, buffer.length + ' bytes, valid PNG')
+            return true
+          }
+          
+          function generateAndValidate(code, format, filename, minSize, testName) {
+            return new Promise(function (resolve) {
+              try {
+                var plantuml = require('node-plantuml-2')
+                var gen = plantuml.generate(code, { format: format })
+                
+                var chunks = []
+                var stderrChunks = []
+                var hasError = false
+                
+                gen.out.on('data', function (chunk) {
+                  chunks.push(chunk)
+                })
+                
+                gen.out.on('error', function (err) {
+                  logTest(testName, false, 'Stream error: ' + err.message)
+                  hasError = true
+                  resolve(false)
+                })
+                
+                // Capture stderr if available
+                if (gen.err) {
+                  gen.err.on('data', function (chunk) {
+                    stderrChunks.push(chunk)
+                  })
+                }
+                
+                gen.out.on('end', function () {
+                  if (hasError) {
+                    resolve(false)
+                    return
+                  }
+                  
+                  var buffer = Buffer.concat(chunks)
+                  var stderr = stderrChunks.length > 0 ? Buffer.concat(stderrChunks).toString() : ''
+                  
+                  // Check stderr for errors
+                  if (stderr && (stderr.includes('ERROR') || stderr.includes('Error') || stderr.includes('Exception'))) {
+                    logTest(testName, false, 'Error in stderr: ' + stderr.substring(0, 200))
+                    resolve(false)
+                    return
+                  }
+                  
+                  // Validate image
+                  var isValid = validateImage(buffer, minSize, testName)
+                  
+                  if (isValid) {
+                    // Save image for inspection
+                    var outputPath = path.join(outputDir, filename)
+                    fs.writeFileSync(outputPath, buffer)
+                    console.log('  Saved to:', outputPath)
+                  }
+                  
+                  resolve(isValid)
+                })
+                
+                setTimeout(function () {
+                  if (chunks.length === 0 && !hasError) {
+                    logTest(testName, false, 'Timeout')
+                    resolve(false)
+                  }
+                }, 30000)
+                
+              } catch (err) {
+                logTest(testName, false, 'Exception: ' + err.message)
+                resolve(false)
+              }
+            })
+          }
+          
           try {
             var plantuml = require('node-plantuml-2')
-            console.log('✓ Module loaded successfully')
+            logTest('Module Load', true, 'Loaded successfully')
             console.log('Available methods:', Object.keys(plantuml).join(', '))
             console.log('')
             
-            // Test 1: Check if generate method exists
+            // Test methods exist
             if (typeof plantuml.generate === 'function') {
-              console.log('✓ generate() method exists')
+              logTest('generate() Method', true, 'Exists')
             } else {
-              console.log('✗ generate() method not found')
+              logTest('generate() Method', false, 'Not found')
               process.exit(1)
             }
             
-            // Test 2: Check if testdot method exists
             if (typeof plantuml.testdot === 'function') {
-              console.log('✓ testdot() method exists')
+              logTest('testdot() Method', true, 'Exists')
             } else {
-              console.log('✗ testdot() method not found')
+              logTest('testdot() Method', false, 'Not found')
               process.exit(1)
             }
             
-            // Test 3: Try to generate a simple diagram
             console.log('')
-            console.log('Testing PNG generation...')
-            var testCode = '@startuml\nAlice -> Bob: Hello\n@enduml'
-            var gen = plantuml.generate(testCode, { format: 'png' })
+            console.log('=== Image Generation Tests ===')
+            console.log('')
             
-            var chunks = []
-            var hasError = false
-            
-            gen.out.on('data', function (chunk) {
-              chunks.push(chunk)
-            })
-            
-            gen.out.on('error', function (err) {
-              console.log('✗ Generation error:', err.message)
-              hasError = true
-            })
-            
-            gen.out.on('end', function () {
-              if (hasError) {
-                process.exit(1)
-              }
-              
-              var buffer = Buffer.concat(chunks)
-              if (buffer.length > 0) {
-                var isPng = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47
-                console.log('✓ PNG generated successfully')
-                console.log('  Size:', buffer.length, 'bytes')
-                console.log('  Valid PNG:', isPng ? 'Yes' : 'No')
-              } else {
-                console.log('✗ Empty output')
-                process.exit(1)
-              }
-              
+            // Test 1: Simple sequence diagram
+            generateAndValidate(
+              '@startuml\nAlice -> Bob: Hello\n@enduml',
+              'png',
+              'test-1-simple-sequence.png',
+              5000, // Minimum 5KB for a valid diagram
+              'Simple Sequence Diagram'
+            ).then(function (result1) {
+              // Test 2: Class diagram
+              return generateAndValidate(
+                '@startuml\nclass User {\n  -name: String\n  +getName(): String\n}\n@enduml',
+                'png',
+                'test-2-class-diagram.png',
+                5000,
+                'Class Diagram'
+              )
+            }).then(function (result2) {
+              // Test 3: Activity diagram (requires Graphviz)
+              return generateAndValidate(
+                '@startuml\nstart\n:Hello World;\nstop\n@enduml',
+                'png',
+                'test-3-activity-diagram.png',
+                5000,
+                'Activity Diagram'
+              )
+            }).then(function () {
+              // Summary
               console.log('')
-              console.log('✅ All tests passed!')
-              process.exit(0)
-            })
-            
-            setTimeout(function () {
-              if (chunks.length === 0 && !hasError) {
-                console.log('✗ Timeout waiting for output')
+              console.log('=== Test Summary ===')
+              var passed = testResults.filter(function (r) { return r.passed }).length
+              var failed = testResults.filter(function (r) { return !r.passed }).length
+              console.log('Passed:', passed)
+              console.log('Failed:', failed)
+              console.log('')
+              
+              if (failed > 0) {
+                console.log('Failed tests:')
+                testResults.forEach(function (r) {
+                  if (!r.passed) {
+                    console.log('  ✗', r.name, r.message || '')
+                  }
+                })
                 process.exit(1)
+              } else {
+                console.log('✅ All tests passed!')
+                process.exit(0)
               }
-            }, 30000)
+            }).catch(function (err) {
+              console.error('✗ Test execution error:', err.message)
+              console.error(err.stack)
+              process.exit(1)
+            })
             
           } catch (err) {
             console.error('✗ Error loading module:', err.message)
@@ -268,87 +391,213 @@ jobs:
         shell: powershell
         run: |
           Set-Location $env:TEMP\external-test-project
-          @"
+          New-Item -ItemType Directory -Force -Path test-output | Out-Null
+          $scriptContent = @'
           #!/usr/bin/env node
           'use strict'
+          
+          var fs = require('fs')
+          var path = require('path')
           
           console.log('=== Testing node-plantuml-2 Installation ===')
           console.log('')
           
+          var testResults = []
+          var outputDir = path.join(__dirname, 'test-output')
+          
+          function logTest(name, passed, message) {
+            var status = passed ? '✓' : '✗'
+            console.log(status, name + (message ? ': ' + message : ''))
+            testResults.push({ name: name, passed: passed, message: message })
+          }
+          
+          function validateImage(buffer, minSize, testName) {
+            if (buffer.length === 0) {
+              logTest(testName, false, 'Empty output')
+              return false
+            }
+            
+            // Check PNG signature
+            var isPng = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47
+            if (!isPng) {
+              logTest(testName, false, 'Invalid PNG signature')
+              return false
+            }
+            
+            // Check minimum size (too small might indicate error image)
+            if (buffer.length < minSize) {
+              logTest(testName, false, 'Image too small (' + buffer.length + ' bytes, expected at least ' + minSize + ')')
+              return false
+            }
+            
+            // Check for common error indicators in PNG
+            var bufferStr = buffer.toString('utf-8', 0, Math.min(1000, buffer.length))
+            if (bufferStr.includes('ERROR') || bufferStr.includes('Error') || bufferStr.includes('Exception')) {
+              logTest(testName, false, 'Error message detected in image')
+              return false
+            }
+            
+            logTest(testName, true, buffer.length + ' bytes, valid PNG')
+            return true
+          }
+          
+          function generateAndValidate(code, format, filename, minSize, testName) {
+            return new Promise(function (resolve) {
+              try {
+                var plantuml = require('node-plantuml-2')
+                var gen = plantuml.generate(code, { format: format })
+                
+                var chunks = []
+                var stderrChunks = []
+                var hasError = false
+                
+                gen.out.on('data', function (chunk) {
+                  chunks.push(chunk)
+                })
+                
+                gen.out.on('error', function (err) {
+                  logTest(testName, false, 'Stream error: ' + err.message)
+                  hasError = true
+                  resolve(false)
+                })
+                
+                // Capture stderr if available
+                if (gen.err) {
+                  gen.err.on('data', function (chunk) {
+                    stderrChunks.push(chunk)
+                  })
+                }
+                
+                gen.out.on('end', function () {
+                  if (hasError) {
+                    resolve(false)
+                    return
+                  }
+                  
+                  var buffer = Buffer.concat(chunks)
+                  var stderr = stderrChunks.length > 0 ? Buffer.concat(stderrChunks).toString() : ''
+                  
+                  // Check stderr for errors
+                  if (stderr && (stderr.includes('ERROR') || stderr.includes('Error') || stderr.includes('Exception'))) {
+                    logTest(testName, false, 'Error in stderr: ' + stderr.substring(0, 200))
+                    resolve(false)
+                    return
+                  }
+                  
+                  // Validate image
+                  var isValid = validateImage(buffer, minSize, testName)
+                  
+                  if (isValid) {
+                    // Save image for inspection
+                    var outputPath = path.join(outputDir, filename)
+                    fs.writeFileSync(outputPath, buffer)
+                    console.log('  Saved to:', outputPath)
+                  }
+                  
+                  resolve(isValid)
+                })
+                
+                setTimeout(function () {
+                  if (chunks.length === 0 && !hasError) {
+                    logTest(testName, false, 'Timeout')
+                    resolve(false)
+                  }
+                }, 30000)
+                
+              } catch (err) {
+                logTest(testName, false, 'Exception: ' + err.message)
+                resolve(false)
+              }
+            })
+          }
+          
           try {
             var plantuml = require('node-plantuml-2')
-            console.log('✓ Module loaded successfully')
+            logTest('Module Load', true, 'Loaded successfully')
             console.log('Available methods:', Object.keys(plantuml).join(', '))
             console.log('')
             
-            // Test 1: Check if generate method exists
+            // Test methods exist
             if (typeof plantuml.generate === 'function') {
-              console.log('✓ generate() method exists')
+              logTest('generate() Method', true, 'Exists')
             } else {
-              console.log('✗ generate() method not found')
+              logTest('generate() Method', false, 'Not found')
               process.exit(1)
             }
             
-            // Test 2: Check if testdot method exists
             if (typeof plantuml.testdot === 'function') {
-              console.log('✓ testdot() method exists')
+              logTest('testdot() Method', true, 'Exists')
             } else {
-              console.log('✗ testdot() method not found')
+              logTest('testdot() Method', false, 'Not found')
               process.exit(1)
             }
             
-            // Test 3: Try to generate a simple diagram
             console.log('')
-            console.log('Testing PNG generation...')
-            var testCode = '@startuml\nAlice -> Bob: Hello\n@enduml'
-            var gen = plantuml.generate(testCode, { format: 'png' })
+            console.log('=== Image Generation Tests ===')
+            console.log('')
             
-            var chunks = []
-            var hasError = false
-            
-            gen.out.on('data', function (chunk) {
-              chunks.push(chunk)
-            })
-            
-            gen.out.on('error', function (err) {
-              console.log('✗ Generation error:', err.message)
-              hasError = true
-            })
-            
-            gen.out.on('end', function () {
-              if (hasError) {
-                process.exit(1)
-              }
-              
-              var buffer = Buffer.concat(chunks)
-              if (buffer.length > 0) {
-                var isPng = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47
-                console.log('✓ PNG generated successfully')
-                console.log('  Size:', buffer.length, 'bytes')
-                console.log('  Valid PNG:', isPng ? 'Yes' : 'No')
-              } else {
-                console.log('✗ Empty output')
-                process.exit(1)
-              }
-              
+            // Test 1: Simple sequence diagram
+            generateAndValidate(
+              '@startuml\nAlice -> Bob: Hello\n@enduml',
+              'png',
+              'test-1-simple-sequence.png',
+              5000, // Minimum 5KB for a valid diagram
+              'Simple Sequence Diagram'
+            ).then(function (result1) {
+              // Test 2: Class diagram
+              return generateAndValidate(
+                '@startuml\nclass User {\n  -name: String\n  +getName(): String\n}\n@enduml',
+                'png',
+                'test-2-class-diagram.png',
+                5000,
+                'Class Diagram'
+              )
+            }).then(function (result2) {
+              // Test 3: Activity diagram (requires Graphviz)
+              return generateAndValidate(
+                '@startuml\nstart\n:Hello World;\nstop\n@enduml',
+                'png',
+                'test-3-activity-diagram.png',
+                5000,
+                'Activity Diagram'
+              )
+            }).then(function () {
+              // Summary
               console.log('')
-              console.log('✅ All tests passed!')
-              process.exit(0)
-            })
-            
-            setTimeout(function () {
-              if (chunks.length === 0 && !hasError) {
-                console.log('✗ Timeout waiting for output')
+              console.log('=== Test Summary ===')
+              var passed = testResults.filter(function (r) { return r.passed }).length
+              var failed = testResults.filter(function (r) { return !r.passed }).length
+              console.log('Passed:', passed)
+              console.log('Failed:', failed)
+              console.log('')
+              
+              if (failed > 0) {
+                console.log('Failed tests:')
+                testResults.forEach(function (r) {
+                  if (!r.passed) {
+                    console.log('  ✗', r.name, r.message || '')
+                  }
+                })
                 process.exit(1)
+              } else {
+                console.log('✅ All tests passed!')
+                process.exit(0)
               }
-            }, 30000)
+            }).catch(function (err) {
+              console.error('✗ Test execution error:', err.message)
+              console.error(err.stack)
+              process.exit(1)
+            })
             
           } catch (err) {
             console.error('✗ Error loading module:', err.message)
             console.error(err.stack)
             process.exit(1)
           }
-          "@ | Out-File -FilePath test-install.js -Encoding utf8
+          '@
+          # Use UTF8NoBOM encoding to avoid BOM issues
+          $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+          [System.IO.File]::WriteAllText("$PWD\test-install.js", $scriptContent, $utf8NoBom)
           Write-Host "Created test script"
 
       # Run the test
@@ -401,4 +650,49 @@ jobs:
         run: |
           Set-Location $env:TEMP\external-test-project
           node -e "var plantuml = require('node-plantuml-2'); var javaResolver = require('node-plantuml-2/lib/java-resolver'); var dotResolver = require('node-plantuml-2/lib/dot-resolver'); console.log('=== Comprehensive Integration Test ==='); console.log(''); var javaPath = javaResolver.resolveJavaExecutable({}); console.log('JRE:', javaPath || 'NOT FOUND'); var dotPath = dotResolver.resolveDotExecutable({ dotPath: null }); console.log('Graphviz:', dotPath || 'NOT FOUND'); plantuml.testdot(function(isOk) { console.log('testdot:', isOk ? 'OK' : 'FAILED'); process.exit(isOk ? 0 : 1); });"
+
+      # Upload generated images as artifacts for manual inspection
+      - name: Prepare images for upload (Windows)
+        if: runner.os == 'Windows' && always()
+        shell: powershell
+        run: |
+          $sourcePath = "$env:TEMP\external-test-project\test-output"
+          $destPath = "${{ github.workspace }}\test-images"
+          New-Item -ItemType Directory -Force -Path $destPath | Out-Null
+          if (Test-Path $sourcePath) {
+            Copy-Item "$sourcePath\*.png" -Destination $destPath -ErrorAction SilentlyContinue
+            Write-Host "Copied images to workspace for upload"
+            Get-ChildItem $destPath -Filter *.png | ForEach-Object { Write-Host "  - $($_.Name) ($($_.Length) bytes)" }
+          } else {
+            Write-Host "No test-output directory found"
+          }
+
+      - name: Upload test images artifact (Windows)
+        if: runner.os == 'Windows' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-images-${{ matrix.os }}-node${{ matrix.node-version }}
+          path: test-images/*.png
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Prepare images for upload (Unix)
+        if: runner.os != 'Windows' && always()
+        shell: bash
+        run: |
+          mkdir -p ${{ github.workspace }}/test-images
+          if [ -d /tmp/external-test-project/test-output ]; then
+            cp /tmp/external-test-project/test-output/*.png ${{ github.workspace }}/test-images/ 2>/dev/null || true
+            echo "Copied images to workspace for upload"
+            ls -lh ${{ github.workspace }}/test-images/*.png 2>/dev/null || echo "No images found"
+          fi
+
+      - name: Upload test images artifact (Unix)
+        if: runner.os != 'Windows' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-images-${{ matrix.os }}-node${{ matrix.node-version }}
+          path: test-images/*.png
+          if-no-files-found: ignore
+          retention-days: 7
 
