@@ -392,6 +392,7 @@ function buildGraphviz () {
           '/usr/lib',
           '/usr/lib64'
         ]
+        var foundGraphvizLibs = []
         for (var k = 0; k < systemLibDirs.length; k++) {
           var sysLibDir = systemLibDirs[k]
           if (fs.existsSync(sysLibDir)) {
@@ -402,16 +403,22 @@ function buildGraphviz () {
                 var entry = entries[m]
                 if (entry.startsWith('libgv') || entry.startsWith('libgraph') ||
                     entry.startsWith('libgvc') || entry.includes('graphviz')) {
-                  // Found Graphviz libraries, but we'll copy them individually
-                  // Don't set libDir to the entire system lib directory
-                  console.log('  Found Graphviz libraries in:', sysLibDir)
-                  break
+                  foundGraphvizLibs.push({
+                    dir: sysLibDir,
+                    file: entry
+                  })
                 }
               }
             } catch (e) {
               // Skip if can't read
             }
           }
+        }
+        // If we found Graphviz libraries in system directories, we'll copy them individually
+        if (foundGraphvizLibs.length > 0) {
+          console.log('  Found', foundGraphvizLibs.length, 'Graphviz libraries in system directories, will copy individually')
+          // Store the list for later copying
+          libDir = foundGraphvizLibs
         }
       }
 
@@ -615,22 +622,62 @@ function buildGraphviz () {
     }
 
     // Copy lib directory if exists (only Graphviz libraries)
-    if (libDir && fs.existsSync(libDir)) {
+    if (libDir) {
       console.log('Copying lib directory...')
       visitedPaths.clear() // Reset visited paths for each directory
       var destLibDir = path.join(graphvizDir, 'lib')
-
-      // For system installations, libDir should already be Graphviz-specific
-      // But double-check to make sure we're not copying the entire /usr/lib
-      if (libDir === '/usr/lib' || libDir === '/usr/local/lib' ||
-          libDir === '/usr/lib/x86_64-linux-gnu' || libDir === '/usr/lib64') {
-        console.log('  Warning: libDir is system directory, this should not happen!')
-        console.log('  Skipping to avoid copying entire system library directory')
-        console.log('  Note: Graphviz will use system libraries at runtime')
+      
+      // Check if libDir is an array (individual library files from system directories)
+      if (Array.isArray(libDir)) {
+        // Copy individual Graphviz library files from system directories
+        console.log('  Copying Graphviz libraries from system directories...')
+        if (!fs.existsSync(destLibDir)) {
+          fs.mkdirSync(destLibDir, { recursive: true })
+        }
+        var copiedCount = 0
+        for (var libIdx = 0; libIdx < libDir.length; libIdx++) {
+          var libInfo = libDir[libIdx]
+          var srcLibPath = path.join(libInfo.dir, libInfo.file)
+          var destLibPath = path.join(destLibDir, libInfo.file)
+          
+          try {
+            if (fs.existsSync(srcLibPath)) {
+              // Check if it's a symlink
+              var libStat = fs.lstatSync(srcLibPath)
+              if (libStat.isSymbolicLink()) {
+                // Follow symlink and copy the actual file
+                var resolvedLibPath = fs.realpathSync(srcLibPath)
+                if (fs.existsSync(resolvedLibPath)) {
+                  fs.copyFileSync(resolvedLibPath, destLibPath)
+                  console.log('  Copied:', libInfo.file, '(resolved from symlink)')
+                  copiedCount++
+                }
+              } else {
+                fs.copyFileSync(srcLibPath, destLibPath)
+                console.log('  Copied:', libInfo.file)
+                copiedCount++
+              }
+            }
+          } catch (e) {
+            console.log('  Warning: Could not copy', libInfo.file, ':', e.message)
+          }
+        }
+        console.log('✓ Copied', copiedCount, 'Graphviz libraries')
+      } else if (fs.existsSync(libDir)) {
+        // For system installations, libDir should already be Graphviz-specific
+        // But double-check to make sure we're not copying the entire /usr/lib
+        if (libDir === '/usr/lib' || libDir === '/usr/local/lib' ||
+            libDir === '/usr/lib/x86_64-linux-gnu' || libDir === '/usr/lib64') {
+          console.log('  Warning: libDir is system directory, this should not happen!')
+          console.log('  Skipping to avoid copying entire system library directory')
+          console.log('  Note: Graphviz will use system libraries at runtime')
+        } else {
+          // It's a Graphviz-specific directory, copy it
+          copyRecursive(libDir, destLibDir, { onlyGraphviz: false })
+          console.log('✓ Copied lib directory')
+        }
       } else {
-        // It's a Graphviz-specific directory, copy it
-        copyRecursive(libDir, destLibDir, { onlyGraphviz: false })
-        console.log('✓ Copied lib directory')
+        console.log('  Skipping lib directory (not found)')
       }
     } else {
       console.log('  Skipping lib directory (not found or not specified)')

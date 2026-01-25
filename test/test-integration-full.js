@@ -103,6 +103,18 @@ try {
     // Verify Graphviz works
     try {
       var env = getEnvWithLibPath(dotPath)
+      var libPath = dotResolver.getBundledGraphvizLibPath(dotPath)
+      if (libPath) {
+        console.log('  Library path:', libPath)
+        console.log('  LD_LIBRARY_PATH:', env.LD_LIBRARY_PATH || env.DYLD_LIBRARY_PATH || 'not set')
+        // Verify lib directory exists
+        if (fs.existsSync(libPath)) {
+          var libFiles = fs.readdirSync(libPath).filter(function (f) { return f.includes('libgvc') || f.includes('libgraph') })
+          console.log('  Found library files:', libFiles.length > 0 ? libFiles.slice(0, 5).join(', ') : 'none')
+        } else {
+          console.log('  Warning: Library directory does not exist:', libPath)
+        }
+      }
       childProcess.execSync('"' + dotPath + '" -V', {
         encoding: 'utf-8',
         stdio: ['ignore', 'pipe', 'pipe'],
