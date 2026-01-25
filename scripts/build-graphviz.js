@@ -209,56 +209,141 @@ function buildGraphviz () {
 
     console.log('✓ Found dot executable at:', dotPath)
 
-    // Get Graphviz installation directory
-    var graphvizInstallDir = path.dirname(path.dirname(dotPath)) // Go up from bin/
+    // Resolve dot path to actual file (follow symlinks)
+    var actualDotPath = dotPath
+    try {
+      var dotStat = fs.lstatSync(dotPath)
+      if (dotStat.isSymbolicLink()) {
+        actualDotPath = fs.realpathSync(dotPath)
+        console.log('  Resolved symlink to:', actualDotPath)
+      }
+    } catch (e) {
+      console.log('  Warning: Could not resolve dot path, using as-is:', e.message)
+    }
+
+    // Get Graphviz installation directory from the actual dot path
+    var actualDotDir = path.dirname(actualDotPath)
+    var graphvizInstallDir = path.dirname(actualDotDir) // Go up from bin/
     var binDir = path.join(graphvizInstallDir, 'bin')
     var libDir = path.join(graphvizInstallDir, 'lib')
 
+    // Verify that binDir contains dot (safety check)
+    var expectedDotInBin = path.join(binDir, path.basename(actualDotPath))
+    if (!fs.existsSync(expectedDotInBin) && actualDotDir !== binDir) {
+      console.log('  Warning: Dot not found in calculated binDir, using actualDotDir instead')
+      console.log('  binDir:', binDir)
+      console.log('  actualDotDir:', actualDotDir)
+      binDir = actualDotDir
+    }
+
     console.log('Graphviz installation directory:', graphvizInstallDir)
+    console.log('Actual dot directory:', actualDotDir)
+    console.log('Bin directory to copy from:', binDir)
     console.log('')
 
     // Copy bin directory
     var destBinDir = path.join(graphvizDir, 'bin')
     var destDotPath = path.join(destBinDir, path.basename(dotPath))
 
-    if (fs.existsSync(binDir)) {
-      console.log('Copying bin directory...')
+    // Ensure dot executable is copied first, then copy rest of bin directory
+    console.log('Copying dot executable first...')
+    console.log('  Source:', actualDotPath)
+    console.log('  Destination:', destDotPath)
+    if (!fs.existsSync(destBinDir)) {
+      fs.mkdirSync(destBinDir, { recursive: true })
+    }
+    
+    // Always copy the actual file, not the symlink
+    fs.copyFileSync(actualDotPath, destDotPath)
+    if (PLATFORM !== 'win32') {
+      fs.chmodSync(destDotPath, 0o755)
+    }
+    console.log('✓ Copied dot executable')
+
+    // Verify dot was copied successfully
+    if (!fs.existsSync(destDotPath)) {
+      throw new Error('Dot executable not found after copying. Expected at: ' + destDotPath)
+    }
+    
+    // Additional verification: check if it's a file (not a symlink or directory)
+    var destStat = fs.statSync(destDotPath)
+    if (!destStat.isFile()) {
+      throw new Error('Dot executable is not a regular file at: ' + destDotPath + ' (isDirectory: ' + destStat.isDirectory() + ')')
+    }
+    
+    // On Unix, verify it's executable
+    if (PLATFORM !== 'win32') {
+      var destMode = destStat.mode
+      var isExecutable = (destMode & parseInt('111', 8)) !== 0
+      if (!isExecutable) {
+        console.log('  Warning: Dot executable does not have execute permissions, setting them...')
+        fs.chmodSync(destDotPath, 0o755)
+      }
+    }
+    
+    console.log('✓ Verified dot executable exists at:', destDotPath)
+    console.log('  File size:', destStat.size, 'bytes')
+    console.log('  Is file:', destStat.isFile())
+
+    // Now copy the rest of the bin directory (if it exists and is different from where dot is)
+    if (fs.existsSync(binDir) && binDir !== actualDotDir) {
+      console.log('Copying remaining bin directory contents...')
       console.log('  Source:', binDir)
       console.log('  Destination:', destBinDir)
       visitedPaths.clear() // Reset visited paths for each directory
-      copyRecursive(binDir, destBinDir)
-      console.log('✓ Copied bin directory')
-
-      // Verify dot executable was copied
-      if (!fs.existsSync(destDotPath)) {
-        throw new Error('Dot executable not found after copying bin directory. Expected at: ' + destDotPath)
+      
+      var entries = fs.readdirSync(binDir)
+      var dotName = path.basename(dotPath)
+      
+      for (var i = 0; i < entries.length; i++) {
+        var entry = entries[i]
+        // Skip dot executable as we already copied it
+        if (entry === dotName || entry === 'dot' || entry === 'dot.exe') {
+          continue
+        }
+        
+        var entrySrc = path.join(binDir, entry)
+        var entryDest = path.join(destBinDir, entry)
+        
+        // Skip if already exists (dot)
+        if (fs.existsSync(entryDest)) {
+          continue
+        }
+        
+        try {
+          copyRecursive(entrySrc, entryDest)
+        } catch (err) {
+          console.log('  Warning: Could not copy', entry, ':', err.message)
+        }
       }
-      console.log('✓ Verified dot executable exists at:', destDotPath)
-
-      // Make dot executable on Unix
-      if (PLATFORM !== 'win32' && fs.existsSync(destDotPath)) {
-        fs.chmodSync(destDotPath, 0o755)
-        console.log('✓ Set executable permissions')
+      console.log('✓ Copied remaining bin directory contents')
+    } else if (fs.existsSync(binDir)) {
+      // binDir is the same as actualDotDir, just copy other files
+      console.log('Copying other files from bin directory...')
+      visitedPaths.clear()
+      var entries = fs.readdirSync(binDir)
+      var dotName = path.basename(dotPath)
+      
+      for (var i = 0; i < entries.length; i++) {
+        var entry = entries[i]
+        if (entry === dotName || entry === 'dot' || entry === 'dot.exe') {
+          continue
+        }
+        
+        var entrySrc = path.join(binDir, entry)
+        var entryDest = path.join(destBinDir, entry)
+        
+        if (fs.existsSync(entryDest)) {
+          continue
+        }
+        
+        try {
+          copyRecursive(entrySrc, entryDest)
+        } catch (err) {
+          console.log('  Warning: Could not copy', entry, ':', err.message)
+        }
       }
-    } else {
-      // Just copy dot executable
-      console.log('Copying dot executable...')
-      console.log('  Source:', dotPath)
-      console.log('  Destination:', destDotPath)
-      if (!fs.existsSync(destBinDir)) {
-        fs.mkdirSync(destBinDir, { recursive: true })
-      }
-      fs.copyFileSync(dotPath, destDotPath)
-      if (PLATFORM !== 'win32') {
-        fs.chmodSync(destDotPath, 0o755)
-      }
-      console.log('✓ Copied dot executable')
-
-      // Verify copy was successful
-      if (!fs.existsSync(destDotPath)) {
-        throw new Error('Dot executable not found after copying. Expected at: ' + destDotPath)
-      }
-      console.log('✓ Verified dot executable exists')
+      console.log('✓ Copied other bin directory files')
     }
 
     // Copy lib directory if exists
