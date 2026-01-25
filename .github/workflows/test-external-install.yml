@@ -713,28 +713,37 @@ jobs:
           if ($dotPath) {
             Write-Host "Graphviz found at: $($dotPath.Source)"
             Write-Host "Testing dot command..."
-            try {
-              # Graphviz -V outputs to stderr, so we need to handle it properly
-              $versionOutput = & $dotPath.Source -V 2>&1 | Out-String
-              Write-Host "Version output: $versionOutput"
-              Write-Host "[OK] Graphviz version check passed"
-            } catch {
-              Write-Host "[WARN] Could not get Graphviz version: $_"
-            }
+            # Graphviz -V outputs to stderr, which is normal behavior
+            $ErrorActionPreference = 'Continue'
+            $versionOutput = & $dotPath.Source -V 2>&1 | Out-String
+            Write-Host "Version: $versionOutput"
+            Write-Host "[OK] Graphviz version check passed"
             
             # Test if dot can generate output
             Write-Host "Testing dot with simple graph..."
-            $testGraph = "digraph G { A -> B }"
+            # Use a temporary file to avoid encoding issues with pipe
+            $tempFile = [System.IO.Path]::GetTempFileName()
             try {
-              $testOutput = $testGraph | & $dotPath.Source -Tpng 2>&1 | Out-String
-              if ($LASTEXITCODE -eq 0 -or $testOutput.Length -gt 0) {
+              # Write graph to file with UTF-8 encoding (no BOM)
+              $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+              [System.IO.File]::WriteAllText($tempFile, "digraph G { A -> B }", $utf8NoBom)
+              
+              # Run dot on the file
+              $testOutput = & $dotPath.Source -Tpng $tempFile 2>&1 | Out-String
+              if ($LASTEXITCODE -eq 0) {
                 Write-Host "[OK] Graphviz dot command works correctly"
               } else {
                 Write-Host "[FAIL] Graphviz dot command failed (exit code: $LASTEXITCODE)"
-                Write-Host "Error: $testOutput"
+                if ($testOutput) {
+                  Write-Host "Error: $testOutput"
+                }
               }
             } catch {
               Write-Host "[FAIL] Graphviz dot command failed with exception: $_"
+            } finally {
+              if (Test-Path $tempFile) {
+                Remove-Item $tempFile -Force
+              }
             }
           } else {
             Write-Host "[WARN] Graphviz not found in PATH"
