@@ -849,58 +849,58 @@ jobs:
           fi
           
           # File exists and has content, proceed with validation
-          if [ -f "$TEST_FILE" ] && [ -s "$TEST_FILE" ]; then
-            SIZE=$(wc -c < "$TEST_FILE" || echo "0")
-            if [ "$SIZE" -lt 500 ]; then
-              echo "❌ Test 1 failed: Image too small ($SIZE bytes)"
-              exit 1
+          SIZE=$(wc -c < "$TEST_FILE" || echo "0")
+          if [ "$SIZE" -lt 500 ]; then
+            echo "❌ Test 1 failed: Image too small ($SIZE bytes)"
+            exit 1
+          fi
+          
+          # Check PNG signature using file command (if available) or simple byte check
+          PNG_VALID=false
+          if command -v file >/dev/null 2>&1; then
+            FILE_TYPE=$(file "$TEST_FILE" 2>/dev/null | grep -i "png\|image" || echo "")
+            if [ -n "$FILE_TYPE" ]; then
+              PNG_VALID=true
+              echo "  PNG signature verified by file command"
             fi
-            # Check PNG signature using file command (if available) or simple byte check
-            PNG_VALID=false
-            if command -v file >/dev/null 2>&1; then
-              FILE_TYPE=$(file "$TEST_FILE" 2>/dev/null | grep -i "png\|image" || echo "")
-              if [ -n "$FILE_TYPE" ]; then
+          fi
+          
+          # If file command didn't confirm, try to check PNG signature manually
+          if [ "$PNG_VALID" = false ]; then
+            # Simple check: PNG files start with bytes 89 50 4E 47
+            # Use a safer method that doesn't cause broken pipe errors
+            if command -v od >/dev/null 2>&1; then
+              # Read first 4 bytes and check them
+              FIRST_BYTES=$(od -An -tx1 -N 4 "$TEST_FILE" 2>/dev/null | tr -d ' \n' || echo "")
+              if [ "$FIRST_BYTES" = "89504e47" ] || [ "$FIRST_BYTES" = "89504E47" ]; then
                 PNG_VALID=true
-                echo "  PNG signature verified by file command"
-              fi
-            fi
-            
-            # If file command didn't confirm, try to check PNG signature manually
-            if [ "$PNG_VALID" = false ]; then
-              # Simple check: PNG files start with bytes 89 50 4E 47
-              # Use a safer method that doesn't cause broken pipe errors
-              if command -v od >/dev/null 2>&1; then
-                # Read first 4 bytes and check them
-                FIRST_BYTES=$(od -An -tx1 -N 4 "$TEST_FILE" 2>/dev/null | tr -d ' \n' || echo "")
-                if [ "$FIRST_BYTES" = "89504e47" ] || [ "$FIRST_BYTES" = "89504E47" ]; then
-                  PNG_VALID=true
-                  echo "  PNG signature verified (0x$FIRST_BYTES)"
-                else
-                  echo "⚠️  Warning: PNG signature check failed (got: $FIRST_BYTES, expected: 89504e47)"
-                  echo "  But file size is valid, continuing..."
-                fi
-              elif command -v hexdump >/dev/null 2>&1; then
-                FIRST_BYTES=$(hexdump -n 4 -C "$TEST_FILE" 2>/dev/null | head -1 | awk '{print $2$3$4$5}' | tr -d ' ' || echo "")
-                if [ "$FIRST_BYTES" = "89504e47" ] || [ "$FIRST_BYTES" = "89504E47" ]; then
-                  PNG_VALID=true
-                  echo "  PNG signature verified (0x$FIRST_BYTES)"
-                else
-                  echo "⚠️  Warning: PNG signature check failed (got: $FIRST_BYTES)"
-                  echo "  But file size is valid, continuing..."
-                fi
+                echo "  PNG signature verified (0x$FIRST_BYTES)"
               else
-                # Fallback: just check file size and that it's not empty
-                echo "⚠️  Warning: Cannot verify PNG signature (od/hexdump not available)"
-                echo "  But file size is valid, assuming PNG is correct"
-                PNG_VALID=true
+                echo "⚠️  Warning: PNG signature check failed (got: $FIRST_BYTES, expected: 89504e47)"
+                echo "  But file size is valid, continuing..."
               fi
+            elif command -v hexdump >/dev/null 2>&1; then
+              FIRST_BYTES=$(hexdump -n 4 -C "$TEST_FILE" 2>/dev/null | head -1 | awk '{print $2$3$4$5}' | tr -d ' ' || echo "")
+              if [ "$FIRST_BYTES" = "89504e47" ] || [ "$FIRST_BYTES" = "89504E47" ]; then
+                PNG_VALID=true
+                echo "  PNG signature verified (0x$FIRST_BYTES)"
+              else
+                echo "⚠️  Warning: PNG signature check failed (got: $FIRST_BYTES)"
+                echo "  But file size is valid, continuing..."
+              fi
+            else
+              # Fallback: just check file size and that it's not empty
+              echo "⚠️  Warning: Cannot verify PNG signature (od/hexdump not available)"
+              echo "  But file size is valid, assuming PNG is correct"
+              PNG_VALID=true
             fi
-            
-            if [ "$PNG_VALID" = false ]; then
-              echo "⚠️  Warning: Could not verify PNG signature, but file exists and has valid size"
-              echo "  This might indicate an error image, but continuing with test..."
-            fi
-            echo "✓ Test 1 passed: $SIZE bytes"
+          fi
+          
+          if [ "$PNG_VALID" = false ]; then
+            echo "⚠️  Warning: Could not verify PNG signature, but file exists and has valid size"
+            echo "  This might indicate an error image, but continuing with test..."
+          fi
+          echo "✓ Test 1 passed: $SIZE bytes"
           
           # Test 2: Complex graph with labels
           echo ""
