@@ -889,7 +889,7 @@ jobs:
               }
               
               // Test dot with PATH
-              var dotVersion = childProcess.execSync('"' + dotPath + '" -V', {
+              var dotVersion = childProcess.execSync('\"' + dotPath + '\" -V', {
                 encoding: 'utf-8',
                 env: env,
                 stdio: ['ignore', 'pipe', 'pipe']
@@ -906,7 +906,7 @@ jobs:
               var tempFile = require('os').tmpdir() + '\\test-graph.dot';
               require('fs').writeFileSync(tempFile, testGraph, 'utf8');
               
-              var dotOutput = childProcess.execSync('"' + dotPath + '" -Tpng "' + tempFile + '"', {
+              var dotOutput = childProcess.execSync('\"' + dotPath + '\" -Tpng \"' + tempFile + '\"', {
                 encoding: 'buffer',
                 env: env,
                 stdio: ['ignore', 'pipe', 'pipe'],
