@@ -794,6 +794,27 @@ jobs:
           
           echo "Using dot executable: $DOT_EXE"
           
+          # Verify dot executable exists and is accessible
+          if [ ! -f "$DOT_EXE" ]; then
+            echo "❌ Error: Dot executable not found at: $DOT_EXE"
+            echo "Current directory: $(pwd)"
+            echo "Listing package directory:"
+            ls -la "$PACKAGE_DIR/graphviz/bin/" || true
+            exit 1
+          fi
+          
+          # Test dot command first (version check)
+          echo "Testing dot command (version check)..."
+          if [ "${{ matrix.platform }}" = "win32" ]; then
+            "$DOT_EXE" -V 2>&1 || {
+              echo "⚠️  Warning: dot -V failed, but continuing with test..."
+            }
+          else
+            "$DOT_EXE" -V 2>&1 || {
+              echo "⚠️  Warning: dot -V failed, but continuing with test..."
+            }
+          fi
+          
           # Test 1: Simple graph
           echo ""
           echo "Test 1: Simple graph..."
@@ -801,34 +822,65 @@ jobs:
           TEST_FILE="$TEST_OUTPUT_DIR/test-1-simple.png"
           TEST_ERROR_FILE="$TEST_OUTPUT_DIR/test-1-error.txt"
           
+          # Ensure output directory exists
+          mkdir -p "$TEST_OUTPUT_DIR" || true
+          
           # Run dot command and capture both stdout and stderr
           echo "$TEST_GRAPH" | "$DOT_EXE" -Tpng > "$TEST_FILE" 2>"$TEST_ERROR_FILE"
           DOT_EXIT_CODE=$?
           
           if [ $DOT_EXIT_CODE -ne 0 ]; then
             echo "❌ Test 1 failed: dot command returned error (exit code: $DOT_EXIT_CODE)"
+            echo "Command: echo \"...\" | \"$DOT_EXE\" -Tpng > \"$TEST_FILE\" 2>\"$TEST_ERROR_FILE\""
+            echo "Output file exists: $([ -f "$TEST_FILE" ] && echo "yes" || echo "no")"
+            echo "Error file exists: $([ -f "$TEST_ERROR_FILE" ] && echo "yes" || echo "no")"
+            
             if [ -f "$TEST_ERROR_FILE" ]; then
-              ERROR_SIZE=$(wc -c < "$TEST_ERROR_FILE" || echo "0")
+              ERROR_SIZE=$(wc -c < "$TEST_ERROR_FILE" 2>/dev/null || echo "0")
+              echo "Error file size: $ERROR_SIZE bytes"
               if [ "$ERROR_SIZE" -gt 0 ]; then
                 echo "Error output:"
                 cat "$TEST_ERROR_FILE"
-                # Check for common dependency errors
-                if grep -q "cannot open shared object file\|No such file\|not found\|error while loading shared libraries" "$TEST_ERROR_FILE"; then
-                  echo ""
-                  echo "⚠️  This appears to be a missing dependency/library issue"
-                  if [ "${{ matrix.platform }}" = "linux" ] && [ -d "$LIB_DIR" ]; then
-                    echo "Lib directory: $LIB_DIR"
-                    echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
-                    echo "Library files in lib directory:"
-                    ls -lh "$LIB_DIR" | head -20 || true
-                    echo ""
-                    echo "Checking ldd output for dot executable:"
-                    ldd "$DOT_EXE" 2>&1 | head -30 || true
-                  fi
-                fi
               else
-                echo "No error output captured"
+                echo "Error file is empty"
+                # Try to get error from output file if it contains error text
+                if [ -f "$TEST_FILE" ] && [ -s "$TEST_FILE" ]; then
+                  echo "Checking if output file contains error message..."
+                  head -20 "$TEST_FILE" | grep -i "error\|exception\|failed" || echo "No error text found in output"
+                fi
               fi
+              
+              # Check for common dependency errors
+              if [ "$ERROR_SIZE" -gt 0 ] && grep -q "cannot open shared object file\|No such file\|not found\|error while loading shared libraries\|The specified module could not be found\|DLL" "$TEST_ERROR_FILE" 2>/dev/null; then
+                echo ""
+                echo "⚠️  This appears to be a missing dependency/library issue"
+                if [ "${{ matrix.platform }}" = "linux" ] && [ -d "$LIB_DIR" ]; then
+                  echo "Lib directory: $LIB_DIR"
+                  echo "LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+                  echo "Library files in lib directory:"
+                  ls -lh "$LIB_DIR" | head -20 || true
+                  echo ""
+                  echo "Checking ldd output for dot executable:"
+                  ldd "$DOT_EXE" 2>&1 | head -30 || true
+                elif [ "${{ matrix.platform }}" = "win32" ]; then
+                  echo "Windows DLL issue detected"
+                  echo "PATH: $PATH"
+                  echo "Bin directory: $BIN_DIR"
+                  echo "Files in bin directory:"
+                  ls -la "$BIN_DIR" | head -20 || true
+                  echo ""
+                  echo "Checking for common DLL files:"
+                  for dll in libgvc.dll libgraph.dll libcdt.dll libcgraph.dll; do
+                    if [ -f "$BIN_DIR/$dll" ]; then
+                      echo "  ✓ Found: $dll"
+                    else
+                      echo "  ✗ Missing: $dll"
+                    fi
+                  done
+                fi
+              fi
+            else
+              echo "Error file was not created"
             fi
             exit 1
           fi
