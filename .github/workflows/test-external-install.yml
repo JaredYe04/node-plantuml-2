@@ -212,17 +212,42 @@ jobs:
               return false
             }
             
-            // Check minimum size (too small might indicate error image)
-            if (buffer.length < minSize) {
-              logTest(testName, false, 'Image too small (' + buffer.length + ' bytes, expected at least ' + minSize + ')')
+            // Check minimum size (very small might indicate error image, but simple diagrams can be small)
+            // Lower threshold: at least 500 bytes for a valid PNG (PNG header + minimal content)
+            var absoluteMinSize = 500
+            if (buffer.length < absoluteMinSize) {
+              logTest(testName, false, 'Image too small (' + buffer.length + ' bytes, expected at least ' + absoluteMinSize + ')')
               return false
             }
             
-            // Check for common error indicators in PNG
-            var bufferStr = buffer.toString('utf-8', 0, Math.min(1000, buffer.length))
-            if (bufferStr.includes('ERROR') || bufferStr.includes('Error') || bufferStr.includes('Exception')) {
-              logTest(testName, false, 'Error message detected in image')
-              return false
+            // Check for common error indicators in PNG (check more of the file)
+            // PlantUML error images often contain text, so check a larger portion
+            var checkSize = Math.min(5000, buffer.length)
+            var bufferStr = buffer.toString('utf-8', 0, checkSize)
+            var errorPatterns = ['ERROR', 'Error', 'Exception', 'Cannot', 'Failed', 'syntax error', 'ParseException']
+            for (var i = 0; i < errorPatterns.length; i++) {
+              if (bufferStr.includes(errorPatterns[i])) {
+                logTest(testName, false, 'Error message detected in image: ' + errorPatterns[i])
+                return false
+              }
+            }
+            
+            // Check if image looks suspiciously like an error (very small and contains text-like patterns)
+            if (buffer.length < 2000) {
+              // For very small images, check if they contain too much text (error messages)
+              var textCharCount = 0
+              for (var j = 0; j < Math.min(500, buffer.length); j++) {
+                var charCode = buffer[j]
+                // Count printable ASCII characters (32-126)
+                if (charCode >= 32 && charCode <= 126) {
+                  textCharCount++
+                }
+              }
+              // If more than 30% of the first 500 bytes are printable text, it might be an error message
+              if (textCharCount > 150) {
+                logTest(testName, false, 'Image appears to contain error text (too many printable characters)')
+                return false
+              }
             }
             
             logTest(testName, true, buffer.length + ' bytes, valid PNG')
@@ -329,7 +354,7 @@ jobs:
               '@startuml\nAlice -> Bob: Hello\n@enduml',
               'png',
               'test-1-simple-sequence.png',
-              5000, // Minimum 5KB for a valid diagram
+              500, // Minimum 500 bytes (lowered for simple diagrams)
               'Simple Sequence Diagram'
             ).then(function (result1) {
               // Test 2: Class diagram
@@ -337,7 +362,7 @@ jobs:
                 '@startuml\nclass User {\n  -name: String\n  +getName(): String\n}\n@enduml',
                 'png',
                 'test-2-class-diagram.png',
-                5000,
+                500, // Minimum 500 bytes
                 'Class Diagram'
               )
             }).then(function (result2) {
@@ -346,7 +371,7 @@ jobs:
                 '@startuml\nstart\n:Hello World;\nstop\n@enduml',
                 'png',
                 'test-3-activity-diagram.png',
-                5000,
+                500, // Minimum 500 bytes
                 'Activity Diagram'
               )
             }).then(function () {
@@ -424,17 +449,42 @@ jobs:
               return false
             }
             
-            // Check minimum size (too small might indicate error image)
-            if (buffer.length < minSize) {
-              logTest(testName, false, 'Image too small (' + buffer.length + ' bytes, expected at least ' + minSize + ')')
+            // Check minimum size (very small might indicate error image, but simple diagrams can be small)
+            // Lower threshold: at least 500 bytes for a valid PNG (PNG header + minimal content)
+            var absoluteMinSize = 500
+            if (buffer.length < absoluteMinSize) {
+              logTest(testName, false, 'Image too small (' + buffer.length + ' bytes, expected at least ' + absoluteMinSize + ')')
               return false
             }
             
-            // Check for common error indicators in PNG
-            var bufferStr = buffer.toString('utf-8', 0, Math.min(1000, buffer.length))
-            if (bufferStr.includes('ERROR') || bufferStr.includes('Error') || bufferStr.includes('Exception')) {
-              logTest(testName, false, 'Error message detected in image')
-              return false
+            // Check for common error indicators in PNG (check more of the file)
+            // PlantUML error images often contain text, so check a larger portion
+            var checkSize = Math.min(5000, buffer.length)
+            var bufferStr = buffer.toString('utf-8', 0, checkSize)
+            var errorPatterns = ['ERROR', 'Error', 'Exception', 'Cannot', 'Failed', 'syntax error', 'ParseException']
+            for (var i = 0; i < errorPatterns.length; i++) {
+              if (bufferStr.includes(errorPatterns[i])) {
+                logTest(testName, false, 'Error message detected in image: ' + errorPatterns[i])
+                return false
+              }
+            }
+            
+            // Check if image looks suspiciously like an error (very small and contains text-like patterns)
+            if (buffer.length < 2000) {
+              // For very small images, check if they contain too much text (error messages)
+              var textCharCount = 0
+              for (var j = 0; j < Math.min(500, buffer.length); j++) {
+                var charCode = buffer[j]
+                // Count printable ASCII characters (32-126)
+                if (charCode >= 32 && charCode <= 126) {
+                  textCharCount++
+                }
+              }
+              // If more than 30% of the first 500 bytes are printable text, it might be an error message
+              if (textCharCount > 150) {
+                logTest(testName, false, 'Image appears to contain error text (too many printable characters)')
+                return false
+              }
             }
             
             logTest(testName, true, buffer.length + ' bytes, valid PNG')
@@ -541,7 +591,7 @@ jobs:
               '@startuml\nAlice -> Bob: Hello\n@enduml',
               'png',
               'test-1-simple-sequence.png',
-              5000, // Minimum 5KB for a valid diagram
+              500, // Minimum 500 bytes (lowered for simple diagrams)
               'Simple Sequence Diagram'
             ).then(function (result1) {
               // Test 2: Class diagram
@@ -549,7 +599,7 @@ jobs:
                 '@startuml\nclass User {\n  -name: String\n  +getName(): String\n}\n@enduml',
                 'png',
                 'test-2-class-diagram.png',
-                5000,
+                500, // Minimum 500 bytes
                 'Class Diagram'
               )
             }).then(function (result2) {
@@ -558,7 +608,7 @@ jobs:
                 '@startuml\nstart\n:Hello World;\nstop\n@enduml',
                 'png',
                 'test-3-activity-diagram.png',
-                5000,
+                500, // Minimum 500 bytes
                 'Activity Diagram'
               )
             }).then(function () {
