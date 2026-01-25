@@ -113,6 +113,11 @@ function isGraphvizFile (filename) {
   
   var baseName = path.basename(filename).toLowerCase()
   
+  // On Windows, always include DLL files (they're needed for executables to run)
+  if (PLATFORM === 'win32' && baseName.endsWith('.dll')) {
+    return true
+  }
+  
   // Check exact match
   for (var i = 0; i < graphvizNames.length; i++) {
     if (baseName === graphvizNames[i] || baseName === graphvizNames[i] + '.exe') {
@@ -400,9 +405,9 @@ function buildGraphviz () {
     console.log('  Is file:', destStat.isFile())
 
     // Now copy the rest of the bin directory (if it exists and is different from where dot is)
-    // Only copy Graphviz-related executables
+    // Only copy Graphviz-related executables and DLL files (on Windows)
     if (fs.existsSync(binDir) && binDir !== actualDotDir) {
-      console.log('Copying Graphviz executables from bin directory...')
+      console.log('Copying Graphviz executables and dependencies from bin directory...')
       console.log('  Source:', binDir)
       console.log('  Destination:', destBinDir)
       visitedPaths.clear() // Reset visited paths for each directory
@@ -418,8 +423,19 @@ function buildGraphviz () {
           continue
         }
         
-        // Only copy Graphviz-related files
-        if (!isGraphvizFile(entry)) {
+        // On Windows, copy all DLL files (needed for executables to run)
+        // On other platforms, only copy Graphviz-related files
+        var shouldCopy = false
+        if (PLATFORM === 'win32') {
+          var entryLower = entry.toLowerCase()
+          // Copy DLL files and Graphviz executables
+          shouldCopy = entryLower.endsWith('.dll') || isGraphvizFile(entry)
+        } else {
+          // Only copy Graphviz-related files
+          shouldCopy = isGraphvizFile(entry)
+        }
+        
+        if (!shouldCopy) {
           continue
         }
         
@@ -432,16 +448,25 @@ function buildGraphviz () {
         }
         
         try {
-          copyRecursive(entrySrc, entryDest, { onlyGraphviz: true })
-          copiedCount++
+          // For DLL files on Windows, just copy directly (they're not symlinks)
+          if (PLATFORM === 'win32' && entry.toLowerCase().endsWith('.dll')) {
+            var entryStat = fs.statSync(entrySrc)
+            if (entryStat.isFile()) {
+              fs.copyFileSync(entrySrc, entryDest)
+              copiedCount++
+            }
+          } else {
+            copyRecursive(entrySrc, entryDest, { onlyGraphviz: true })
+            copiedCount++
+          }
         } catch (err) {
           console.log('  Warning: Could not copy', entry, ':', err.message)
         }
       }
-      console.log('✓ Copied', copiedCount, 'Graphviz executables from bin directory')
+      console.log('✓ Copied', copiedCount, 'files from bin directory')
     } else if (fs.existsSync(binDir)) {
       // binDir is the same as actualDotDir, just copy other Graphviz files
-      console.log('Copying other Graphviz executables from bin directory...')
+      console.log('Copying other Graphviz executables and dependencies from bin directory...')
       visitedPaths.clear()
       var entries = fs.readdirSync(binDir)
       var dotName = path.basename(dotPath)
@@ -453,8 +478,19 @@ function buildGraphviz () {
           continue
         }
         
-        // Only copy Graphviz-related files
-        if (!isGraphvizFile(entry)) {
+        // On Windows, copy all DLL files (needed for executables to run)
+        // On other platforms, only copy Graphviz-related files
+        var shouldCopy = false
+        if (PLATFORM === 'win32') {
+          var entryLower = entry.toLowerCase()
+          // Copy DLL files and Graphviz executables
+          shouldCopy = entryLower.endsWith('.dll') || isGraphvizFile(entry)
+        } else {
+          // Only copy Graphviz-related files
+          shouldCopy = isGraphvizFile(entry)
+        }
+        
+        if (!shouldCopy) {
           continue
         }
         
@@ -466,13 +502,22 @@ function buildGraphviz () {
         }
         
         try {
-          copyRecursive(entrySrc, entryDest, { onlyGraphviz: true })
-          copiedCount++
+          // For DLL files on Windows, just copy directly (they're not symlinks)
+          if (PLATFORM === 'win32' && entry.toLowerCase().endsWith('.dll')) {
+            var entryStat = fs.statSync(entrySrc)
+            if (entryStat.isFile()) {
+              fs.copyFileSync(entrySrc, entryDest)
+              copiedCount++
+            }
+          } else {
+            copyRecursive(entrySrc, entryDest, { onlyGraphviz: true })
+            copiedCount++
+          }
         } catch (err) {
           console.log('  Warning: Could not copy', entry, ':', err.message)
         }
       }
-      console.log('✓ Copied', copiedCount, 'Graphviz executables')
+      console.log('✓ Copied', copiedCount, 'files')
     }
 
     // Copy lib directory if exists (only Graphviz libraries)
