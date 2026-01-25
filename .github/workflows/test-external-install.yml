@@ -104,6 +104,14 @@ jobs:
       - name: Build package
         run: npm run build || echo "No build script found, skipping"
 
+      - name: Copy test scripts to workspace
+        run: |
+          if [ -f "test-graphviz-render.js" ]; then
+            echo "Test script exists in workspace"
+          else
+            echo "Test script will be copied during test execution"
+          fi
+
       # Create a temporary external project directory
       - name: Create external test project (Unix)
         if: runner.os != 'Windows'
@@ -131,6 +139,11 @@ jobs:
           cd /tmp/external-test-project
           npm install ${{ github.workspace }} --save
           echo "Installed node-plantuml-2 from local path"
+          # Copy test script if it exists
+          if [ -f "${{ github.workspace }}/test-graphviz-render.js" ]; then
+            cp "${{ github.workspace }}/test-graphviz-render.js" .
+            echo "Copied test-graphviz-render.js"
+          fi
 
       - name: Install node-plantuml-2 from local path (Windows)
         if: runner.os == 'Windows'
@@ -139,6 +152,16 @@ jobs:
           Set-Location $env:TEMP\external-test-project
           npm install "${{ github.workspace }}" --save
           Write-Host "Installed node-plantuml-2 from local path"
+          # Copy test script if it exists
+          if (Test-Path "${{ github.workspace }}\test-graphviz-render.js") {
+            Copy-Item "${{ github.workspace }}\test-graphviz-render.js" -Destination "test-graphviz-render.js"
+            Write-Host "Copied test-graphviz-render.js"
+          }
+          # Copy test script if it exists
+          if (Test-Path "${{ github.workspace }}\test-graphviz-render.js") {
+            Copy-Item "${{ github.workspace }}\test-graphviz-render.js" -Destination "test-graphviz-render.js"
+            Write-Host "Copied test-graphviz-render.js"
+          }
 
       # Verify installation
       - name: Verify installation (Unix)
@@ -704,6 +727,18 @@ jobs:
           cd /tmp/external-test-project
           node test-install.js
 
+      - name: Run Graphviz render test (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cd /tmp/external-test-project
+          echo "=== Running Graphviz render test ==="
+          if [ -f "test-graphviz-render.js" ]; then
+            node test-graphviz-render.js
+          else
+            echo "[WARN] test-graphviz-render.js not found, skipping render test"
+          fi
+
       - name: Verify Graphviz before test (Windows)
         if: runner.os == 'Windows'
         shell: powershell
@@ -761,6 +796,19 @@ jobs:
             Write-Host "Graphviz available at: $($dotPath.Source)"
           }
           node test-install.js
+
+      - name: Run Graphviz render test (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          Set-Location $env:TEMP\external-test-project
+          Write-Host "=== Running Graphviz render test ==="
+          if (Test-Path "test-graphviz-render.js") {
+            node test-graphviz-render.js
+          } else {
+            Write-Host "[WARN] test-graphviz-render.js not found, skipping render test"
+            Write-Host "Note: Script should have been copied during installation step"
+          }
 
       # Additional comprehensive test
       - name: Run comprehensive integration test (Unix)
@@ -829,7 +877,7 @@ jobs:
               }
               
               // Test dot with PATH
-              var dotVersion = childProcess.execSync('\"' + dotPath + '\" -V', {
+              var dotVersion = childProcess.execSync('"' + dotPath + '" -V', {
                 encoding: 'utf-8',
                 env: env,
                 stdio: ['ignore', 'pipe', 'pipe']
@@ -846,7 +894,7 @@ jobs:
               var tempFile = require('os').tmpdir() + '\\test-graph.dot';
               require('fs').writeFileSync(tempFile, testGraph, 'utf8');
               
-              var dotOutput = childProcess.execSync('\"' + dotPath + '\" -Tpng \"' + tempFile + '\"', {
+              var dotOutput = childProcess.execSync('"' + dotPath + '" -Tpng "' + tempFile + '"', {
                 encoding: 'buffer',
                 env: env,
                 stdio: ['ignore', 'pipe', 'pipe'],
