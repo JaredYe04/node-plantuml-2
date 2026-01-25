@@ -750,6 +750,164 @@ jobs:
           
           echo "✅ Graphviz package verification passed"
 
+      - name: Test Graphviz package with image generation
+        shell: bash
+        run: |
+          echo "🧪 Testing Graphviz package with image generation..."
+          PACKAGE_DIR="runtimes/@node-plantuml-2/graphviz-${{ matrix.platform }}-${{ matrix.arch }}"
+          TEST_OUTPUT_DIR="${{ github.workspace }}/test-graphviz-output-${{ matrix.platform }}-${{ matrix.arch }}"
+          mkdir -p "$TEST_OUTPUT_DIR"
+          
+          if [ "${{ matrix.platform }}" = "win32" ]; then
+            DOT_EXE="$PACKAGE_DIR/graphviz/bin/dot.exe"
+            BIN_DIR="$PACKAGE_DIR/graphviz/bin"
+            # Windows uses PATH for DLLs
+            if [ -d "$BIN_DIR" ]; then
+              export PATH="$BIN_DIR:$PATH"
+              echo "Added to PATH: $BIN_DIR"
+            fi
+          else
+            DOT_EXE="$PACKAGE_DIR/graphviz/bin/dot"
+            LIB_DIR="$PACKAGE_DIR/graphviz/lib"
+            # Set library path for Linux/macOS
+            if [ "${{ matrix.platform }}" = "linux" ] && [ -d "$LIB_DIR" ]; then
+              export LD_LIBRARY_PATH="$LIB_DIR:$LD_LIBRARY_PATH"
+              echo "Set LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+            elif [ "${{ matrix.platform }}" = "darwin" ] && [ -d "$LIB_DIR" ]; then
+              export DYLD_LIBRARY_PATH="$LIB_DIR:$DYLD_LIBRARY_PATH"
+              echo "Set DYLD_LIBRARY_PATH: $DYLD_LIBRARY_PATH"
+            fi
+          fi
+          
+          # Verify dot executable exists and is executable
+          if [ ! -f "$DOT_EXE" ]; then
+            echo "❌ Error: Dot executable not found at $DOT_EXE"
+            exit 1
+          fi
+          
+          if [ "${{ matrix.platform }}" != "win32" ]; then
+            chmod +x "$DOT_EXE" || true
+          fi
+          
+          echo "Using dot executable: $DOT_EXE"
+          
+          # Test 1: Simple graph
+          echo ""
+          echo "Test 1: Simple graph..."
+          TEST_GRAPH="digraph G { A -> B; B -> C; }"
+          TEST_FILE="$TEST_OUTPUT_DIR/test-1-simple.png"
+          echo "$TEST_GRAPH" | "$DOT_EXE" -Tpng > "$TEST_FILE" 2>&1 || {
+            echo "❌ Test 1 failed"
+            exit 1
+          }
+          
+          if [ -f "$TEST_FILE" ] && [ -s "$TEST_FILE" ]; then
+            SIZE=$(wc -c < "$TEST_FILE" || echo "0")
+            if [ "$SIZE" -lt 500 ]; then
+              echo "❌ Test 1 failed: Image too small ($SIZE bytes)"
+              exit 1
+            fi
+            # Check PNG signature using file command (if available) or simple byte check
+            if command -v file >/dev/null 2>&1; then
+              FILE_TYPE=$(file "$TEST_FILE" | grep -i "png\|image" || echo "")
+              if [ -z "$FILE_TYPE" ]; then
+                echo "⚠️  Warning: file command did not detect PNG (but continuing)"
+              fi
+            fi
+            # Simple check: PNG files start with bytes 89 50 4E 47
+            # Check first byte is 0x89 (137 in decimal) using od or hexdump
+            if command -v od >/dev/null 2>&1; then
+              FIRST_BYTE=$(od -An -tx1 "$TEST_FILE" | head -1 | awk '{print $1}')
+              if [ "$FIRST_BYTE" != "89" ]; then
+                echo "❌ Test 1 failed: Invalid PNG signature (first byte: 0x$FIRST_BYTE, expected 0x89)"
+                exit 1
+              fi
+            elif command -v hexdump >/dev/null 2>&1; then
+              FIRST_BYTE=$(hexdump -n 1 -C "$TEST_FILE" | head -1 | awk '{print $2}')
+              if [ "$FIRST_BYTE" != "89" ]; then
+                echo "❌ Test 1 failed: Invalid PNG signature (first byte: 0x$FIRST_BYTE, expected 0x89)"
+                exit 1
+              fi
+            else
+              # Fallback: just check file size and that it's not empty
+              echo "⚠️  Warning: Cannot verify PNG signature (od/hexdump not available), but file size check passed"
+            fi
+            echo "✓ Test 1 passed: $SIZE bytes"
+          else
+            echo "❌ Test 1 failed: No output file"
+            exit 1
+          fi
+          
+          # Test 2: Complex graph with labels
+          echo ""
+          echo "Test 2: Complex graph with labels..."
+          TEST_GRAPH2="digraph G {
+            node [shape=box];
+            A [label=\"Node A\"];
+            B [label=\"Node B\"];
+            C [label=\"Node C\"];
+            A -> B [label=\"Edge 1\"];
+            B -> C [label=\"Edge 2\"];
+          }"
+          TEST_FILE2="$TEST_OUTPUT_DIR/test-2-complex.png"
+          echo "$TEST_GRAPH2" | "$DOT_EXE" -Tpng > "$TEST_FILE2" 2>&1 || {
+            echo "❌ Test 2 failed"
+            exit 1
+          }
+          
+          if [ -f "$TEST_FILE2" ] && [ -s "$TEST_FILE2" ]; then
+            SIZE=$(wc -c < "$TEST_FILE2" || echo "0")
+            if [ "$SIZE" -lt 500 ]; then
+              echo "❌ Test 2 failed: Image too small ($SIZE bytes)"
+              exit 1
+            fi
+            echo "✓ Test 2 passed: $SIZE bytes"
+          else
+            echo "❌ Test 2 failed: No output file"
+            exit 1
+          fi
+          
+          # Test 3: SVG output
+          echo ""
+          echo "Test 3: SVG output..."
+          TEST_GRAPH3="digraph G { X -> Y; }"
+          TEST_FILE3="$TEST_OUTPUT_DIR/test-3-svg.svg"
+          echo "$TEST_GRAPH3" | "$DOT_EXE" -Tsvg > "$TEST_FILE3" 2>&1 || {
+            echo "❌ Test 3 failed"
+            exit 1
+          }
+          
+          if [ -f "$TEST_FILE3" ] && [ -s "$TEST_FILE3" ]; then
+            SIZE=$(wc -c < "$TEST_FILE3" || echo "0")
+            if [ "$SIZE" -lt 200 ]; then
+              echo "❌ Test 3 failed: SVG too small ($SIZE bytes)"
+              exit 1
+            fi
+            # Check SVG signature
+            if ! grep -q "<svg" "$TEST_FILE3"; then
+              echo "❌ Test 3 failed: Invalid SVG format"
+              exit 1
+            fi
+            echo "✓ Test 3 passed: $SIZE bytes"
+          else
+            echo "❌ Test 3 failed: No output file"
+            exit 1
+          fi
+          
+          echo ""
+          echo "✅ All Graphviz package tests passed!"
+          echo "Generated test images:"
+          ls -lh "$TEST_OUTPUT_DIR"/* || true
+
+      - name: Upload Graphviz test images as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: graphviz-test-images-${{ matrix.platform }}-${{ matrix.arch }}
+          path: test-graphviz-output-${{ matrix.platform }}-${{ matrix.arch }}/*
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Verify NPM authentication
         shell: bash
         run: |

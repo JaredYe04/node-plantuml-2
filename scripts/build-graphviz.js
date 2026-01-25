@@ -257,6 +257,155 @@ function copyRecursive (src, dest, options) {
 }
 
 /**
+ * Find and copy all dependencies of an executable using ldd (Linux only)
+ * @param {string} executablePath - Path to the executable
+ * @param {string} destLibDir - Destination lib directory
+ * @returns {number} - Number of libraries copied
+ */
+function copyDependenciesWithLdd (executablePath, destLibDir) {
+  if (PLATFORM !== 'linux') {
+    return 0
+  }
+
+  try {
+    console.log('  Finding dependencies using ldd...')
+    var lddOutput = childProcess.execSync('ldd "' + executablePath + '"', { encoding: 'utf-8' })
+    var dependencies = []
+    var lines = lddOutput.split('\n')
+    
+    // System libraries to skip (these are part of the OS and shouldn't be copied)
+    var skipLibraries = [
+      'linux-vdso',
+      'libc.so',
+      'libm.so',
+      'libdl.so',
+      'libpthread.so',
+      'librt.so',
+      'libresolv.so',
+      'ld-linux'
+    ]
+    
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim()
+      if (!line) continue
+      
+      // Parse ldd output format: "libname => /path/to/lib (0x...)" or "/path/to/lib (0x...)"
+      var match = line.match(/=>\s+(.+?)\s+\(/i) || line.match(/^\s*(.+?)\s+\(/)
+      if (match) {
+        var libPath = match[1].trim()
+        
+        // Skip if it's a system library
+        var shouldSkip = false
+        for (var j = 0; j < skipLibraries.length; j++) {
+          if (libPath.includes(skipLibraries[j])) {
+            shouldSkip = true
+            break
+          }
+        }
+        
+        // Skip if it's not an absolute path or doesn't exist
+        if (shouldSkip || !path.isAbsolute(libPath) || !fs.existsSync(libPath)) {
+          continue
+        }
+        
+        // Skip if it's already in our lib directory (Graphviz libraries we already copied)
+        var libBasename = path.basename(libPath)
+        var alreadyCopied = fs.existsSync(path.join(destLibDir, libBasename))
+        if (alreadyCopied) {
+          continue
+        }
+        
+        dependencies.push(libPath)
+      }
+    }
+    
+    console.log('  Found', dependencies.length, 'dependencies to copy')
+    
+    if (dependencies.length === 0) {
+      return 0
+    }
+    
+    // Ensure dest lib directory exists
+    if (!fs.existsSync(destLibDir)) {
+      fs.mkdirSync(destLibDir, { recursive: true })
+    }
+    
+    var copiedCount = 0
+    var failedCount = 0
+    
+    for (var k = 0; k < dependencies.length; k++) {
+      var depPath = dependencies[k]
+      var depBasename = path.basename(depPath)
+      var destPath = path.join(destLibDir, depBasename)
+      
+      try {
+        // Check if it's a symlink
+        var depStat = fs.lstatSync(depPath)
+        if (depStat.isSymbolicLink()) {
+          // Follow symlink and copy the actual file
+          var resolvedPath = fs.realpathSync(depPath)
+          if (fs.existsSync(resolvedPath)) {
+            var resolvedBasename = path.basename(resolvedPath)
+            var resolvedDestPath = path.join(destLibDir, resolvedBasename)
+            
+            // Copy the actual library file (target of symlink) if not already copied
+            var targetCopied = false
+            if (!fs.existsSync(resolvedDestPath)) {
+              fs.copyFileSync(resolvedPath, resolvedDestPath)
+              console.log('  ✓ Copied dependency:', resolvedBasename, '(target of', depBasename + ')')
+              copiedCount++
+              targetCopied = true
+            }
+            
+            // Also create a symlink with the original name if names are different
+            // This ensures libraries can be found by their soname (e.g., libcairo.so.2)
+            if (depBasename !== resolvedBasename && !fs.existsSync(destPath)) {
+              try {
+                // Create a symlink pointing to the actual file
+                fs.symlinkSync(resolvedBasename, destPath)
+                console.log('  ✓ Created symlink:', depBasename, '->', resolvedBasename)
+                // Don't increment copiedCount for symlink, only for actual file
+              } catch (symlinkErr) {
+                // If symlink creation fails, just copy the file as fallback
+                if (!targetCopied) {
+                  fs.copyFileSync(resolvedPath, destPath)
+                  console.log('  ✓ Copied dependency:', depBasename, '(as file, symlink failed)')
+                  copiedCount++
+                }
+              }
+            }
+          } else {
+            console.log('  ✗ Failed: Symlink target not found for', depBasename)
+            failedCount++
+          }
+        } else {
+          // Regular file, copy it
+          if (!fs.existsSync(destPath)) {
+            fs.copyFileSync(depPath, destPath)
+            console.log('  ✓ Copied dependency:', depBasename)
+            copiedCount++
+          }
+        }
+      } catch (e) {
+        console.log('  ✗ Error copying dependency', depBasename, ':', e.message)
+        failedCount++
+      }
+    }
+    
+    console.log('✓ Copied', copiedCount, 'dependencies')
+    if (failedCount > 0) {
+      console.log('⚠️  Failed to copy', failedCount, 'dependencies')
+    }
+    
+    return copiedCount
+  } catch (e) {
+    console.log('  ⚠️  Warning: Could not find dependencies using ldd:', e.message)
+    console.log('  This may cause runtime errors if dependencies are missing')
+    return 0
+  }
+}
+
+/**
  * Main build function
  */
 function buildGraphviz () {
@@ -690,6 +839,16 @@ function buildGraphviz () {
         if (libFailedCount > 0) {
           console.log('⚠️  Failed to copy', libFailedCount, 'libraries')
         }
+        
+        // For Linux, also copy all dependencies using ldd
+        if (PLATFORM === 'linux' && libCopiedCount > 0) {
+          console.log('')
+          console.log('Copying system dependencies for dot executable...')
+          var depsCopied = copyDependenciesWithLdd(destDotPath, destLibDir)
+          if (depsCopied > 0) {
+            console.log('✓ Total dependencies copied:', depsCopied)
+          }
+        }
       } else if (fs.existsSync(libDir)) {
       // For system installations, libDir should already be Graphviz-specific
       // But double-check to make sure we're not copying the entire /usr/lib
@@ -702,13 +861,38 @@ function buildGraphviz () {
         // It's a Graphviz-specific directory, copy it
         copyRecursive(libDir, destLibDir, { onlyGraphviz: false })
         console.log('✓ Copied lib directory')
+        
+        // For Linux, also copy all dependencies using ldd
+        if (PLATFORM === 'linux') {
+          console.log('')
+          console.log('Copying system dependencies for dot executable...')
+          var depsCopied = copyDependenciesWithLdd(destDotPath, destLibDir)
+          if (depsCopied > 0) {
+            console.log('✓ Total dependencies copied:', depsCopied)
+          }
+        }
         }
       } else {
         console.log('  Skipping lib directory (not found)')
       }
     } else {
-      console.log('  Skipping lib directory (not found or not specified)')
-      console.log('  Note: Graphviz may use system libraries, which is fine')
+      // Even if no Graphviz lib directory found, for Linux we should still copy dependencies
+      if (PLATFORM === 'linux') {
+        console.log('  No Graphviz lib directory found, but copying system dependencies...')
+        var destLibDir = path.join(graphvizDir, 'lib')
+        if (!fs.existsSync(destLibDir)) {
+          fs.mkdirSync(destLibDir, { recursive: true })
+        }
+        var depsCopied = copyDependenciesWithLdd(destDotPath, destLibDir)
+        if (depsCopied > 0) {
+          console.log('✓ Copied', depsCopied, 'system dependencies')
+        } else {
+          console.log('  ⚠️  Warning: No dependencies copied - Graphviz may not work without system libraries')
+        }
+      } else {
+        console.log('  Skipping lib directory (not found or not specified)')
+        console.log('  Note: Graphviz may use system libraries, which is fine')
+      }
     }
 
     // Copy share directory if exists (for config files, etc.)
