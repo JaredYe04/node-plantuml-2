@@ -6,9 +6,18 @@
  * 自动生成图片并验证内容是否正确
  */
 
-var plantuml = require('./lib/node-plantuml')
-var dotResolver = require('./lib/dot-resolver')
-var javaResolver = require('./lib/java-resolver')
+// Try to require from installed package first, fallback to local lib
+var plantuml, dotResolver, javaResolver
+try {
+  plantuml = require('node-plantuml-2')
+  dotResolver = require('node-plantuml-2/lib/dot-resolver')
+  javaResolver = require('node-plantuml-2/lib/java-resolver')
+} catch (e) {
+  // Fallback to local lib (for development)
+  plantuml = require('./lib/node-plantuml')
+  dotResolver = require('./lib/dot-resolver')
+  javaResolver = require('./lib/java-resolver')
+}
 var fs = require('fs')
 var path = require('path')
 var os = require('os')

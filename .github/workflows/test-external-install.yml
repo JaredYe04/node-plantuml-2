@@ -104,13 +104,25 @@ jobs:
       - name: Build package
         run: npm run build || echo "No build script found, skipping"
 
-      - name: Copy test scripts to workspace
+      - name: Prepare test scripts (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
         run: |
           if [ -f "test-graphviz-render.js" ]; then
             echo "Test script exists in workspace"
           else
             echo "Test script will be copied during test execution"
           fi
+
+      - name: Prepare test scripts (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          if (Test-Path "test-graphviz-render.js") {
+            Write-Host "Test script exists in workspace"
+          } else {
+            Write-Host "Test script will be copied during test execution"
+          }
 
       # Create a temporary external project directory
       - name: Create external test project (Unix)
