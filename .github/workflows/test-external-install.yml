@@ -232,23 +232,19 @@ jobs:
               }
             }
             
-            // Check if image looks suspiciously like an error (very small and contains text-like patterns)
-            if (buffer.length < 2000) {
-              // For very small images, check if they contain too much text (error messages)
-              var textCharCount = 0
-              for (var j = 0; j < Math.min(500, buffer.length); j++) {
-                var charCode = buffer[j]
-                // Count printable ASCII characters (32-126)
-                if (charCode >= 32 && charCode <= 126) {
-                  textCharCount++
-                }
-              }
-              // If more than 30% of the first 500 bytes are printable text, it might be an error message
-              if (textCharCount > 150) {
-                logTest(testName, false, 'Image appears to contain error text (too many printable characters)')
+            // Additional validation: Check PNG structure
+            // Valid PNG should have IHDR chunk after signature (bytes 12-16 should be "IHDR")
+            if (buffer.length >= 16) {
+              var ihdrCheck = buffer.toString('ascii', 12, 16)
+              if (ihdrCheck !== 'IHDR') {
+                logTest(testName, false, 'Invalid PNG structure (IHDR not found)')
                 return false
               }
             }
+            
+            // Check if image might be an error image by looking for error patterns in readable text
+            // Only check if we found error patterns, don't check printable character count
+            // (PNG binary data can contain many printable characters, which is normal)
             
             logTest(testName, true, buffer.length + ' bytes, valid PNG')
             return true
@@ -469,23 +465,19 @@ jobs:
               }
             }
             
-            // Check if image looks suspiciously like an error (very small and contains text-like patterns)
-            if (buffer.length < 2000) {
-              // For very small images, check if they contain too much text (error messages)
-              var textCharCount = 0
-              for (var j = 0; j < Math.min(500, buffer.length); j++) {
-                var charCode = buffer[j]
-                // Count printable ASCII characters (32-126)
-                if (charCode >= 32 && charCode <= 126) {
-                  textCharCount++
-                }
-              }
-              // If more than 30% of the first 500 bytes are printable text, it might be an error message
-              if (textCharCount > 150) {
-                logTest(testName, false, 'Image appears to contain error text (too many printable characters)')
+            // Additional validation: Check PNG structure
+            // Valid PNG should have IHDR chunk after signature (bytes 12-16 should be "IHDR")
+            if (buffer.length >= 16) {
+              var ihdrCheck = buffer.toString('ascii', 12, 16)
+              if (ihdrCheck !== 'IHDR') {
+                logTest(testName, false, 'Invalid PNG structure (IHDR not found)')
                 return false
               }
             }
+            
+            // Check if image might be an error image by looking for error patterns in readable text
+            // Only check if we found error patterns, don't check printable character count
+            // (PNG binary data can contain many printable characters, which is normal)
             
             logTest(testName, true, buffer.length + ' bytes, valid PNG')
             return true

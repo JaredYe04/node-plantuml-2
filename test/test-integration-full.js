@@ -17,6 +17,27 @@ var path = require('path')
 var os = require('os')
 var childProcess = require('child_process')
 
+/**
+ * Get environment with library path for bundled Graphviz
+ */
+function getEnvWithLibPath (dotPath) {
+  var env = Object.assign({}, process.env)
+  var libPath = dotResolver.getBundledGraphvizLibPath(dotPath)
+  
+  if (libPath) {
+    var platform = os.platform()
+    if (platform === 'linux') {
+      var existingLibPath = env.LD_LIBRARY_PATH || ''
+      env.LD_LIBRARY_PATH = libPath + (existingLibPath ? ':' + existingLibPath : '')
+    } else if (platform === 'darwin') {
+      var existingDyldPath = env.DYLD_LIBRARY_PATH || ''
+      env.DYLD_LIBRARY_PATH = libPath + (existingDyldPath ? ':' + existingDyldPath : '')
+    }
+  }
+  
+  return env
+}
+
 console.log('')
 console.log('=== Comprehensive Integration Test ===')
 console.log('Platform:', os.platform(), os.arch())
@@ -81,9 +102,11 @@ try {
 
     // Verify Graphviz works
     try {
+      var env = getEnvWithLibPath(dotPath)
       childProcess.execSync('"' + dotPath + '" -V', {
         encoding: 'utf-8',
-        stdio: ['ignore', 'pipe', 'pipe']
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: env
       })
       logTest('Graphviz Execution', true, 'dot version check passed')
     } catch (e) {
