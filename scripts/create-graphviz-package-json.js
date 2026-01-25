@@ -69,5 +69,22 @@ if (!fs.existsSync(OUTPUT_DIR)) {
 var packageJsonPath = path.join(OUTPUT_DIR, 'package.json')
 fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n')
 
+// Create .npmignore file to ensure only graphviz directory is published
+var npmignorePath = path.join(OUTPUT_DIR, '.npmignore')
+var npmignoreContent = '# Only include graphviz directory\n' +
+  '*\n' +
+  '!graphviz/\n' +
+  '!graphviz/**\n' +
+  '!package.json\n' +
+  '!README.md\n' +
+  '\n' +
+  '# Exclude large or unnecessary files\n' +
+  '*.log\n' +
+  '*.tmp\n' +
+  '.DS_Store\n' +
+  'Thumbs.db\n'
+fs.writeFileSync(npmignorePath, npmignoreContent)
+
 console.log('Created package.json:', packageJsonPath)
+console.log('Created .npmignore:', npmignorePath)
 console.log('Package:', packageName + '@' + VERSION)

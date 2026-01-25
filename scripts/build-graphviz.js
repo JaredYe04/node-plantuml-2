@@ -99,12 +99,57 @@ function findSystemDot () {
 }
 
 /**
+ * Check if a file name is Graphviz-related
+ */
+function isGraphvizFile (filename) {
+  // Graphviz executables and related files
+  var graphvizNames = [
+    'dot', 'neato', 'fdp', 'sfdp', 'twopi', 'circo', 'gv',
+    'gvcolor', 'gvpack', 'gvpr', 'acyclic', 'bcomps', 'ccomps',
+    'gc', 'gvgen', 'mm2gv', 'nop', 'sccmap', 'tred', 'unflatten',
+    'gxl2gv', 'gv2gxl', 'gvmap', 'gvmap.sh', 'lefty', 'lneato',
+    'dotty', 'osage', 'patchwork'
+  ]
+  
+  var baseName = path.basename(filename).toLowerCase()
+  
+  // Check exact match
+  for (var i = 0; i < graphvizNames.length; i++) {
+    if (baseName === graphvizNames[i] || baseName === graphvizNames[i] + '.exe') {
+      return true
+    }
+  }
+  
+  // Check if starts with graphviz-related prefix
+  if (baseName.startsWith('libgv') || 
+      baseName.startsWith('libgraph') ||
+      baseName.startsWith('libpathplan') ||
+      baseName.startsWith('libcdt') ||
+      baseName.startsWith('libcgraph') ||
+      baseName.startsWith('libxdot') ||
+      baseName.startsWith('liblab') ||
+      baseName.startsWith('libgvc') ||
+      baseName.startsWith('libgvplugin') ||
+      baseName.includes('graphviz') ||
+      baseName.endsWith('.gv') ||
+      baseName.endsWith('.gvpr')) {
+    return true
+  }
+  
+  return false
+}
+
+/**
  * Copy file or directory recursively
- * Handles symbolic links to avoid infinite loops
+ * Handles symbolic links and only copies Graphviz-related files
  */
 var visitedPaths = new Set()
+var MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB per file limit
 
-function copyRecursive (src, dest) {
+function copyRecursive (src, dest, options) {
+  options = options || {}
+  var onlyGraphviz = options.onlyGraphviz !== false // Default to true for bin directory
+  
   // Normalize paths to avoid issues with different path formats
   var normalizedSrc = path.resolve(src)
 
@@ -119,44 +164,55 @@ function copyRecursive (src, dest) {
   try {
     // Use lstatSync to detect symlinks without following them
     var stat = fs.lstatSync(src)
+    var basename = path.basename(src)
+
+    // Skip non-Graphviz files in bin directory
+    if (onlyGraphviz && !isGraphvizFile(basename)) {
+      return
+    }
 
     if (stat.isSymbolicLink()) {
-      // For Graphviz dot executable, follow the symlink and copy the actual file
-      // Otherwise, just copy the symlink
-      var basename = path.basename(src)
-      if (basename === 'dot' || basename === 'dot.exe') {
+      // For Graphviz executables, follow the symlink and copy the actual file
+      if (basename === 'dot' || basename === 'dot.exe' || isGraphvizFile(basename)) {
         try {
           // Follow symlink and copy the actual file
           var resolvedPath = fs.realpathSync(src)
           if (fs.existsSync(resolvedPath)) {
             var resolvedStat = fs.statSync(resolvedPath)
+            
+            // Check file size
+            if (resolvedStat.isFile() && resolvedStat.size > MAX_FILE_SIZE) {
+              console.log('  Skipping large file:', resolvedPath, '(' + (resolvedStat.size / 1024 / 1024).toFixed(2) + 'MB)')
+              return
+            }
+            
             if (resolvedStat.isFile()) {
               var destDir = path.dirname(dest)
               if (!fs.existsSync(destDir)) {
                 fs.mkdirSync(destDir, { recursive: true })
               }
               fs.copyFileSync(resolvedPath, dest)
-              console.log('  Copied dot executable (resolved symlink):', resolvedPath, '->', dest)
               return
             }
           }
         } catch (err) {
-          console.log('  Warning: Could not resolve symlink for dot, copying symlink instead:', err.message)
+          console.log('  Warning: Could not resolve symlink for', basename, ':', err.message)
         }
       }
-      // For other symlinks, copy the symlink itself
-      var linkTarget = fs.readlinkSync(src)
-      if (!fs.existsSync(dest)) {
-        fs.symlinkSync(linkTarget, dest)
-      }
+      // For other symlinks, skip them (we don't want broken symlinks)
       return
     }
 
     if (stat.isDirectory()) {
       // Skip known problematic directories
-      var basename = path.basename(src)
       if (basename === 'X11' && src.includes('/usr/bin')) {
         console.log('Skipping problematic X11 symlink directory:', src)
+        return
+      }
+      
+      // Skip system directories that shouldn't be copied
+      if (src.includes('/usr/bin') && !src.includes('graphviz') && !src.includes('Cellar')) {
+        console.log('Skipping system directory:', src)
         return
       }
 
@@ -167,10 +223,15 @@ function copyRecursive (src, dest) {
       for (var i = 0; i < entries.length; i++) {
         var entrySrc = path.join(src, entries[i])
         var entryDest = path.join(dest, entries[i])
-        copyRecursive(entrySrc, entryDest)
+        copyRecursive(entrySrc, entryDest, options)
       }
     } else {
-      // Regular file
+      // Regular file - check size
+      if (stat.size > MAX_FILE_SIZE) {
+        console.log('  Skipping large file:', src, '(' + (stat.size / 1024 / 1024).toFixed(2) + 'MB)')
+        return
+      }
+      
       var destDir = path.dirname(dest)
       if (!fs.existsSync(destDir)) {
         fs.mkdirSync(destDir, { recursive: true })
@@ -179,7 +240,7 @@ function copyRecursive (src, dest) {
     }
   } catch (err) {
     // If we can't access the file, skip it
-    if (err.code === 'ELOOP' || err.code === 'EACCES') {
+    if (err.code === 'ELOOP' || err.code === 'EACCES' || err.code === 'ENOENT') {
       console.log('Skipping inaccessible path:', src, err.message)
       return
     }
@@ -224,21 +285,74 @@ function buildGraphviz () {
     // Get Graphviz installation directory from the actual dot path
     var actualDotDir = path.dirname(actualDotPath)
     var graphvizInstallDir = path.dirname(actualDotDir) // Go up from bin/
-    var binDir = path.join(graphvizInstallDir, 'bin')
-    var libDir = path.join(graphvizInstallDir, 'lib')
-
-    // Verify that binDir contains dot (safety check)
-    var expectedDotInBin = path.join(binDir, path.basename(actualDotPath))
-    if (!fs.existsSync(expectedDotInBin) && actualDotDir !== binDir) {
-      console.log('  Warning: Dot not found in calculated binDir, using actualDotDir instead')
-      console.log('  binDir:', binDir)
-      console.log('  actualDotDir:', actualDotDir)
+    
+    // Check if we're in a system directory (like /usr/bin)
+    // If so, try to find the actual Graphviz installation
+    var isSystemBin = actualDotDir === '/usr/bin' || actualDotDir === '/usr/local/bin' || 
+                      actualDotDir.includes('/usr/bin') || actualDotDir.includes('/usr/local/bin')
+    
+    var binDir = actualDotDir
+    var libDir = null
+    var shareDir = null
+    
+    if (isSystemBin) {
+      // For system installations, only copy the dot executable itself
+      // Don't try to copy from /usr/bin as it contains many non-Graphviz files
+      console.log('  Detected system bin directory, will only copy Graphviz executables')
       binDir = actualDotDir
+      
+      // Try to find Graphviz lib directory
+      var possibleLibDirs = [
+        '/usr/lib/graphviz',
+        '/usr/lib/x86_64-linux-gnu/graphviz',
+        '/usr/local/lib/graphviz',
+        '/usr/lib64/graphviz'
+      ]
+      for (var i = 0; i < possibleLibDirs.length; i++) {
+        if (fs.existsSync(possibleLibDirs[i])) {
+          libDir = possibleLibDirs[i]
+          console.log('  Found Graphviz lib directory:', libDir)
+          break
+        }
+      }
+      
+      // Try to find Graphviz share directory
+      var possibleShareDirs = [
+        '/usr/share/graphviz',
+        '/usr/local/share/graphviz'
+      ]
+      for (var j = 0; j < possibleShareDirs.length; j++) {
+        if (fs.existsSync(possibleShareDirs[j])) {
+          shareDir = possibleShareDirs[j]
+          console.log('  Found Graphviz share directory:', shareDir)
+          break
+        }
+      }
+    } else {
+      // For non-system installations (like Homebrew Cellar), use the calculated paths
+      binDir = path.join(graphvizInstallDir, 'bin')
+      libDir = path.join(graphvizInstallDir, 'lib')
+      shareDir = path.join(graphvizInstallDir, 'share')
+      
+      // Verify that binDir contains dot (safety check)
+      var expectedDotInBin = path.join(binDir, path.basename(actualDotPath))
+      if (!fs.existsSync(expectedDotInBin) && actualDotDir !== binDir) {
+        console.log('  Warning: Dot not found in calculated binDir, using actualDotDir instead')
+        console.log('  binDir:', binDir)
+        console.log('  actualDotDir:', actualDotDir)
+        binDir = actualDotDir
+      }
     }
 
     console.log('Graphviz installation directory:', graphvizInstallDir)
     console.log('Actual dot directory:', actualDotDir)
     console.log('Bin directory to copy from:', binDir)
+    if (libDir) {
+      console.log('Lib directory:', libDir)
+    }
+    if (shareDir) {
+      console.log('Share directory:', shareDir)
+    }
     console.log('')
 
     // Copy bin directory
@@ -286,14 +400,16 @@ function buildGraphviz () {
     console.log('  Is file:', destStat.isFile())
 
     // Now copy the rest of the bin directory (if it exists and is different from where dot is)
+    // Only copy Graphviz-related executables
     if (fs.existsSync(binDir) && binDir !== actualDotDir) {
-      console.log('Copying remaining bin directory contents...')
+      console.log('Copying Graphviz executables from bin directory...')
       console.log('  Source:', binDir)
       console.log('  Destination:', destBinDir)
       visitedPaths.clear() // Reset visited paths for each directory
       
       var entries = fs.readdirSync(binDir)
       var dotName = path.basename(dotPath)
+      var copiedCount = 0
       
       for (var i = 0; i < entries.length; i++) {
         var entry = entries[i]
@@ -302,27 +418,34 @@ function buildGraphviz () {
           continue
         }
         
+        // Only copy Graphviz-related files
+        if (!isGraphvizFile(entry)) {
+          continue
+        }
+        
         var entrySrc = path.join(binDir, entry)
         var entryDest = path.join(destBinDir, entry)
         
-        // Skip if already exists (dot)
+        // Skip if already exists
         if (fs.existsSync(entryDest)) {
           continue
         }
         
         try {
-          copyRecursive(entrySrc, entryDest)
+          copyRecursive(entrySrc, entryDest, { onlyGraphviz: true })
+          copiedCount++
         } catch (err) {
           console.log('  Warning: Could not copy', entry, ':', err.message)
         }
       }
-      console.log('✓ Copied remaining bin directory contents')
+      console.log('✓ Copied', copiedCount, 'Graphviz executables from bin directory')
     } else if (fs.existsSync(binDir)) {
-      // binDir is the same as actualDotDir, just copy other files
-      console.log('Copying other files from bin directory...')
+      // binDir is the same as actualDotDir, just copy other Graphviz files
+      console.log('Copying other Graphviz executables from bin directory...')
       visitedPaths.clear()
       var entries = fs.readdirSync(binDir)
       var dotName = path.basename(dotPath)
+      var copiedCount = 0
       
       for (var i = 0; i < entries.length; i++) {
         var entry = entries[i]
@@ -330,6 +453,11 @@ function buildGraphviz () {
           continue
         }
         
+        // Only copy Graphviz-related files
+        if (!isGraphvizFile(entry)) {
+          continue
+        }
+        
         var entrySrc = path.join(binDir, entry)
         var entryDest = path.join(destBinDir, entry)
         
@@ -338,31 +466,59 @@ function buildGraphviz () {
         }
         
         try {
-          copyRecursive(entrySrc, entryDest)
+          copyRecursive(entrySrc, entryDest, { onlyGraphviz: true })
+          copiedCount++
         } catch (err) {
           console.log('  Warning: Could not copy', entry, ':', err.message)
         }
       }
-      console.log('✓ Copied other bin directory files')
+      console.log('✓ Copied', copiedCount, 'Graphviz executables')
     }
 
-    // Copy lib directory if exists
-    if (fs.existsSync(libDir)) {
+    // Copy lib directory if exists (only Graphviz libraries)
+    if (libDir && fs.existsSync(libDir)) {
       console.log('Copying lib directory...')
       visitedPaths.clear() // Reset visited paths for each directory
       var destLibDir = path.join(graphvizDir, 'lib')
-      copyRecursive(libDir, destLibDir)
+      // For lib directory, we still filter but less strictly (only by size)
+      copyRecursive(libDir, destLibDir, { onlyGraphviz: false })
       console.log('✓ Copied lib directory')
+    } else {
+      console.log('  Skipping lib directory (not found or not specified)')
     }
 
     // Copy share directory if exists (for config files, etc.)
-    var shareDir = path.join(graphvizInstallDir, 'share')
-    if (fs.existsSync(shareDir)) {
+    if (shareDir && fs.existsSync(shareDir)) {
       console.log('Copying share directory...')
       visitedPaths.clear() // Reset visited paths for each directory
       var destShareDir = path.join(graphvizDir, 'share')
-      copyRecursive(shareDir, destShareDir)
+      // For share directory, filter by Graphviz-related paths
+      var shareGraphvizDir = path.join(shareDir, 'graphviz')
+      if (fs.existsSync(shareGraphvizDir)) {
+        // Only copy graphviz subdirectory
+        copyRecursive(shareGraphvizDir, path.join(destShareDir, 'graphviz'), { onlyGraphviz: false })
+      } else {
+        // Copy entire share directory but with size limits
+        copyRecursive(shareDir, destShareDir, { onlyGraphviz: false })
+      }
       console.log('✓ Copied share directory')
+    } else {
+      // Try default location if shareDir wasn't set
+      var defaultShareDir = path.join(graphvizInstallDir, 'share')
+      if (fs.existsSync(defaultShareDir)) {
+        console.log('Copying share directory from default location...')
+        visitedPaths.clear()
+        var destShareDir = path.join(graphvizDir, 'share')
+        var shareGraphvizDir = path.join(defaultShareDir, 'graphviz')
+        if (fs.existsSync(shareGraphvizDir)) {
+          copyRecursive(shareGraphvizDir, path.join(destShareDir, 'graphviz'), { onlyGraphviz: false })
+        } else {
+          copyRecursive(defaultShareDir, destShareDir, { onlyGraphviz: false })
+        }
+        console.log('✓ Copied share directory')
+      } else {
+        console.log('  Skipping share directory (not found)')
+      }
     }
 
     // On Windows, also check for Graphviz installation in Program Files
@@ -377,6 +533,20 @@ function buildGraphviz () {
       }
     }
 
+    // Calculate and verify package size
+    console.log('')
+    console.log('Calculating package size...')
+    var totalSize = calculateDirectorySize(graphvizDir)
+    var totalSizeMB = (totalSize / 1024 / 1024).toFixed(2)
+    console.log('Total package size:', totalSizeMB, 'MB')
+    
+    // Warn if package is too large (npm limit is typically 250MB)
+    var MAX_PACKAGE_SIZE = 200 * 1024 * 1024 // 200MB warning threshold
+    if (totalSize > MAX_PACKAGE_SIZE) {
+      console.log('⚠️  Warning: Package size exceeds', (MAX_PACKAGE_SIZE / 1024 / 1024).toFixed(0) + 'MB')
+      console.log('   This may cause issues when publishing to npm')
+    }
+
     console.log('')
     console.log('✅ Graphviz package built successfully!')
     console.log('Output directory:', OUTPUT_DIR)
@@ -388,6 +558,33 @@ function buildGraphviz () {
   }
 }
 
+/**
+ * Calculate total size of a directory recursively
+ */
+function calculateDirectorySize (dirPath) {
+  var totalSize = 0
+  try {
+    var entries = fs.readdirSync(dirPath)
+    for (var i = 0; i < entries.length; i++) {
+      var entryPath = path.join(dirPath, entries[i])
+      try {
+        var stat = fs.statSync(entryPath)
+        if (stat.isDirectory()) {
+          totalSize += calculateDirectorySize(entryPath)
+        } else if (stat.isFile()) {
+          totalSize += stat.size
+        }
+        // Skip symlinks in size calculation
+      } catch (e) {
+        // Skip files we can't access
+      }
+    }
+  } catch (e) {
+    // Skip directories we can't access
+  }
+  return totalSize
+}
+
 // Run if called directly
 if (require.main === module) {
   buildGraphviz()
@@ -396,3 +593,4 @@ if (require.main === module) {
 module.exports = {
   buildGraphviz: buildGraphviz
 }
+
