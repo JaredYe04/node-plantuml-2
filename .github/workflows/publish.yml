@@ -604,6 +604,40 @@ jobs:
               else
                 echo "❌ Bin directory does not exist: $PACKAGE_DIR/graphviz/bin"
               fi
+              
+              # Check lib directory (critical for Linux)
+              if [ -d "$PACKAGE_DIR/graphviz/lib" ]; then
+                echo "✅ Lib directory exists"
+                echo "Lib directory contents:"
+                ls -la "$PACKAGE_DIR/graphviz/lib" || echo "Failed to list lib directory"
+                if [ "${{ matrix.platform }}" == "linux" ]; then
+                  LIB_COUNT=$(find "$PACKAGE_DIR/graphviz/lib" -type f \( -name "lib*.so*" -o -name "lib*.so" \) 2>/dev/null | wc -l || echo "0")
+                  echo "Found $LIB_COUNT library files"
+                  if [ "$LIB_COUNT" -eq 0 ]; then
+                    echo "⚠️  WARNING: No library files found! This will cause runtime errors."
+                  else
+                    echo "Sample libraries:"
+                    find "$PACKAGE_DIR/graphviz/lib" -type f \( -name "lib*.so*" -o -name "lib*.so" \) | head -10 | while read lib; do
+                      echo "  - $(basename "$lib")"
+                    done
+                  fi
+                fi
+              else
+                if [ "${{ matrix.platform }}" == "linux" ]; then
+                  echo "❌ ERROR: Lib directory does not exist! This will cause runtime errors on Linux."
+                else
+                  echo "ℹ️  Lib directory does not exist (may be OK for this platform)"
+                fi
+              fi
+              
+              # Calculate and display package size
+              PACKAGE_SIZE=$(du -sh "$PACKAGE_DIR/graphviz" 2>/dev/null | cut -f1 || echo "unknown")
+              PACKAGE_SIZE_BYTES=$(du -sb "$PACKAGE_DIR/graphviz" 2>/dev/null | cut -f1 || echo "0")
+              echo ""
+              echo "Package size: $PACKAGE_SIZE ($PACKAGE_SIZE_BYTES bytes)"
+              if [ "${{ matrix.platform }}" == "linux" ] && [ "$PACKAGE_SIZE_BYTES" -lt 10485760 ]; then
+                echo "⚠️  WARNING: Package size is less than 10MB, may be missing libraries!"
+              fi
             else
               echo "❌ Graphviz directory does not exist: $PACKAGE_DIR/graphviz"
             fi
@@ -643,12 +677,75 @@ jobs:
           
           echo "✓ Graphviz dot executable found"
           
-          # Verify dot works
-          if [ "${{ matrix.platform }}" = "win32" ]; then
-            "$DOT_EXE" -V
-          else
+          # Verify executable permissions on Unix
+          if [ "${{ matrix.platform }}" != "win32" ]; then
             chmod +x "$DOT_EXE"
-            "$DOT_EXE" -V
+            if [ -x "$DOT_EXE" ]; then
+              echo "✓ Dot executable has execute permissions"
+            else
+              echo "⚠️  Warning: Dot executable does not have execute permissions"
+            fi
+          fi
+          
+          # Verify lib directory exists and contains libraries (critical for Linux)
+          if [ "${{ matrix.platform }}" == "linux" ]; then
+            LIB_DIR="$PACKAGE_DIR/graphviz/lib"
+            if [ -d "$LIB_DIR" ]; then
+              echo "✓ Lib directory exists"
+              LIB_COUNT=$(find "$LIB_DIR" -type f \( -name "lib*.so*" -o -name "lib*.so" \) 2>/dev/null | wc -l || echo "0")
+              echo "  Found $LIB_COUNT library files"
+              if [ "$LIB_COUNT" -eq 0 ]; then
+                echo "❌ ERROR: No library files found in lib directory!"
+                echo "  This will cause runtime errors: 'cannot open shared object file'"
+                echo "  Lib directory contents:"
+                ls -la "$LIB_DIR" || true
+                exit 1
+              else
+                echo "  Sample libraries:"
+                find "$LIB_DIR" -type f \( -name "lib*.so*" -o -name "lib*.so" \) | head -5 | while read lib; do
+                  echo "    - $(basename "$lib") ($(du -h "$lib" | cut -f1))"
+                done
+              fi
+            else
+              echo "❌ ERROR: Lib directory does not exist!"
+              echo "  This will cause runtime errors on Linux"
+              exit 1
+            fi
+          fi
+          
+          # Calculate package size
+          PACKAGE_SIZE=$(du -sh "$PACKAGE_DIR/graphviz" 2>/dev/null | cut -f1 || echo "unknown")
+          echo "Package size: $PACKAGE_SIZE"
+          
+          # Warn if package is suspiciously small (Linux should be 20-50MB with libraries)
+          if [ "${{ matrix.platform }}" == "linux" ]; then
+            PACKAGE_SIZE_BYTES=$(du -sb "$PACKAGE_DIR/graphviz" 2>/dev/null | cut -f1 || echo "0")
+            MIN_EXPECTED_SIZE=$((10 * 1024 * 1024)) # 10MB minimum
+            if [ "$PACKAGE_SIZE_BYTES" -lt "$MIN_EXPECTED_SIZE" ]; then
+              echo "❌ ERROR: Package size ($PACKAGE_SIZE) is too small!"
+              echo "  Expected at least 10MB for Linux package with libraries"
+              echo "  Current size: $PACKAGE_SIZE_BYTES bytes"
+              echo "  This indicates missing library files"
+              exit 1
+            fi
+          fi
+          
+          # Verify dot works (with library path for Linux)
+          if [ "${{ matrix.platform }}" = "win32" ]; then
+            "$DOT_EXE" -V || echo "⚠️  Warning: dot -V failed (may need DLLs)"
+          else
+            if [ "${{ matrix.platform }}" == "linux" ] && [ -d "$LIB_DIR" ]; then
+              # Set LD_LIBRARY_PATH for testing
+              export LD_LIBRARY_PATH="$LIB_DIR:$LD_LIBRARY_PATH"
+            fi
+            "$DOT_EXE" -V || {
+              echo "❌ ERROR: dot -V failed"
+              if [ "${{ matrix.platform }}" == "linux" ]; then
+                echo "  This may indicate missing or incompatible libraries"
+                echo "  LD_LIBRARY_PATH: $LD_LIBRARY_PATH"
+              fi
+              exit 1
+            }
           fi
           
           echo "✅ Graphviz package verification passed"

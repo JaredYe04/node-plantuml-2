@@ -362,14 +362,41 @@ jobs:
                 'Class Diagram'
               )
             }).then(function (result2) {
-              // Test 3: Activity diagram (requires Graphviz)
-              return generateAndValidate(
-                '@startuml\nstart\n:Hello World;\nstop\n@enduml',
-                'png',
-                'test-3-activity-diagram.png',
-                500, // Minimum 500 bytes
-                'Activity Diagram'
-              )
+            // Test 3: Activity diagram (requires Graphviz)
+            return generateAndValidate(
+              '@startuml\nstart\n:Hello World;\nstop\n@enduml',
+              'png',
+              'test-3-activity-diagram.png',
+              500, // Minimum 500 bytes
+              'Activity Diagram'
+            )
+          }).then(function (result3) {
+            // Test 4: State diagram (requires Graphviz)
+            return generateAndValidate(
+              '@startuml\n[*] --> State1\nState1 --> State2\nState2 --> [*]\n@enduml',
+              'png',
+              'test-4-state-diagram.png',
+              500,
+              'State Diagram'
+            )
+          }).then(function (result4) {
+            // Test 5: Component diagram with dependencies (requires Graphviz)
+            return generateAndValidate(
+              '@startuml\ncomponent Component1\ncomponent Component2\nComponent1 --> Component2\n@enduml',
+              'png',
+              'test-5-component-diagram.png',
+              500,
+              'Component Diagram'
+            )
+          }).then(function (result5) {
+            // Test 6: Use case diagram (requires Graphviz)
+            return generateAndValidate(
+              '@startuml\nactor User\nusecase "Use Case 1" as UC1\nUser --> UC1\n@enduml',
+              'png',
+              'test-6-usecase-diagram.png',
+              500,
+              'Use Case Diagram'
+            )
             }).then(function () {
               // Summary
               console.log('')
@@ -595,14 +622,41 @@ jobs:
                 'Class Diagram'
               )
             }).then(function (result2) {
-              // Test 3: Activity diagram (requires Graphviz)
-              return generateAndValidate(
-                '@startuml\nstart\n:Hello World;\nstop\n@enduml',
-                'png',
-                'test-3-activity-diagram.png',
-                500, // Minimum 500 bytes
-                'Activity Diagram'
-              )
+            // Test 3: Activity diagram (requires Graphviz)
+            return generateAndValidate(
+              '@startuml\nstart\n:Hello World;\nstop\n@enduml',
+              'png',
+              'test-3-activity-diagram.png',
+              500, // Minimum 500 bytes
+              'Activity Diagram'
+            )
+          }).then(function (result3) {
+            // Test 4: State diagram (requires Graphviz)
+            return generateAndValidate(
+              '@startuml\n[*] --> State1\nState1 --> State2\nState2 --> [*]\n@enduml',
+              'png',
+              'test-4-state-diagram.png',
+              500,
+              'State Diagram'
+            )
+          }).then(function (result4) {
+            // Test 5: Component diagram with dependencies (requires Graphviz)
+            return generateAndValidate(
+              '@startuml\ncomponent Component1\ncomponent Component2\nComponent1 --> Component2\n@enduml',
+              'png',
+              'test-5-component-diagram.png',
+              500,
+              'Component Diagram'
+            )
+          }).then(function (result5) {
+            // Test 6: Use case diagram (requires Graphviz)
+            return generateAndValidate(
+              '@startuml\nactor User\nusecase "Use Case 1" as UC1\nUser --> UC1\n@enduml',
+              'png',
+              'test-6-usecase-diagram.png',
+              500,
+              'Use Case Diagram'
+            )
             }).then(function () {
               // Summary
               console.log('')
