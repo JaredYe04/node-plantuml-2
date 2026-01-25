@@ -393,16 +393,27 @@ function buildGraphviz () {
           '/usr/lib64'
         ]
         var foundGraphvizLibs = []
+        var foundLibDirs = new Set() // Track which directories we've already checked
         for (var k = 0; k < systemLibDirs.length; k++) {
           var sysLibDir = systemLibDirs[k]
-          if (fs.existsSync(sysLibDir)) {
+          if (fs.existsSync(sysLibDir) && !foundLibDirs.has(sysLibDir)) {
+            foundLibDirs.add(sysLibDir)
             try {
               var entries = fs.readdirSync(sysLibDir)
-              // Look for Graphviz libraries
+              // Look for Graphviz libraries - expanded pattern to catch all variants
               for (var m = 0; m < entries.length; m++) {
                 var entry = entries[m]
-                if (entry.startsWith('libgv') || entry.startsWith('libgraph') ||
-                    entry.startsWith('libgvc') || entry.includes('graphviz')) {
+                var entryLower = entry.toLowerCase()
+                // Match Graphviz library patterns
+                if (entryLower.startsWith('libgv') ||
+                    entryLower.startsWith('libgraph') ||
+                    entryLower.startsWith('libgvc') ||
+                    entryLower.startsWith('libcdt') ||
+                    entryLower.startsWith('libcgraph') ||
+                    entryLower.startsWith('libpathplan') ||
+                    entryLower.startsWith('libxdot') ||
+                    entryLower.startsWith('liblab') ||
+                    entryLower.includes('graphviz')) {
                   foundGraphvizLibs.push({
                     dir: sysLibDir,
                     file: entry
@@ -410,7 +421,7 @@ function buildGraphviz () {
                 }
               }
             } catch (e) {
-              // Skip if can't read
+              console.log('  Warning: Could not read directory', sysLibDir, ':', e.message)
             }
           }
         }
@@ -634,7 +645,7 @@ function buildGraphviz () {
         if (!fs.existsSync(destLibDir)) {
           fs.mkdirSync(destLibDir, { recursive: true })
         }
-        var copiedCount = 0
+        var libCopiedCount = 0
         for (var libIdx = 0; libIdx < libDir.length; libIdx++) {
           var libInfo = libDir[libIdx]
           var srcLibPath = path.join(libInfo.dir, libInfo.file)
@@ -650,19 +661,19 @@ function buildGraphviz () {
                 if (fs.existsSync(resolvedLibPath)) {
                   fs.copyFileSync(resolvedLibPath, destLibPath)
                   console.log('  Copied:', libInfo.file, '(resolved from symlink)')
-                  copiedCount++
+                  libCopiedCount++
                 }
               } else {
                 fs.copyFileSync(srcLibPath, destLibPath)
                 console.log('  Copied:', libInfo.file)
-                copiedCount++
+                libCopiedCount++
               }
             }
           } catch (e) {
             console.log('  Warning: Could not copy', libInfo.file, ':', e.message)
           }
         }
-        console.log('✓ Copied', copiedCount, 'Graphviz libraries')
+        console.log('✓ Copied', libCopiedCount, 'Graphviz libraries')
       } else if (fs.existsSync(libDir)) {
         // For system installations, libDir should already be Graphviz-specific
         // But double-check to make sure we're not copying the entire /usr/lib
