@@ -743,7 +743,7 @@ jobs:
             echo "✓ PlantUML JAR already exists"
           fi
 
-      - name: End-to-end test: Generate PlantUML diagrams with Graphviz
+      - name: 'End-to-end test: Generate PlantUML diagrams with Graphviz'
         shell: bash
         run: |
           echo "🧪 Running end-to-end test: Generating PlantUML diagrams with Graphviz..."

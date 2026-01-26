@@ -506,8 +506,9 @@ ls node_modules/@node-plantuml-2/
 
 ### 文档
 - `docs/RUNTIME_PACKAGES_BUILD_AND_PUBLISH.md` - **运行时包构建和发布完整指南**
-- `docs/BUNDLED_JRE_IMPLEMENTATION.md` - JRE 实现细节
-- `docs/BUILD_GUIDE.md` - 构建指南
+- `docs/GRAPHVIZ_PACKAGE_VERIFICATION.md` - Graphviz 包验证指南
+- `docs/END_TO_END_TESTING.md` - 端到端测试指南
+- `docs/GRAPHVIZ_QUALITY_ASSURANCE.md` - Graphviz 质量保证
 - `README.md` - 用户文档
 
 ---

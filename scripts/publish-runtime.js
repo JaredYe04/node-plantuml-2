@@ -75,7 +75,7 @@ if (!fs.existsSync(packageJsonPath)) {
 // Check if JRE exists
 if (!fs.existsSync(jrePath)) {
   console.error('Error: JRE not found at:', jrePath)
-  console.error('Please build JRE first: node scripts/build-jre-windows.js')
+  console.error('Please build JRE first: node scripts/build-jre.js <platform> <arch>')
   process.exit(1)
 }
 

@@ -62,9 +62,7 @@
     "test:integration": "node test/test-integration-full.js",
     "build": "node nail/build.js",
     "build:all": "node scripts/build-all.js",
-    "build:all:jar-only": "node scripts/get-plantuml-jar.js --latest",
-    "test:graphviz": "node scripts/test-graphviz-build.js",
-    "test:graphviz:build": "node scripts/test-graphviz-build.js"
+    "build:all:jar-only": "node scripts/get-plantuml-jar.js --latest"
   },
   "bin": {
     "puml": "index.js"

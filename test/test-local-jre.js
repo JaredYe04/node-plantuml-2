@@ -20,7 +20,7 @@ var javaExe = path.join(localJrePath, 'jre', 'bin', 'java.exe')
 
 if (!fs.existsSync(javaExe)) {
   console.error('✗ Local JRE not found at:', javaExe)
-  console.error('Please build JRE first: node scripts/build-jre-windows.js')
+  console.error('Please build JRE first: node scripts/build-jre.js <platform> <arch>')
   process.exit(1)
 }
 
