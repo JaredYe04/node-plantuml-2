@@ -48,6 +48,7 @@
     "nail/plantumlnail.jar",
     "scripts/download.js",
     "scripts/get-vizjs.js",
+    "scripts/install-graphviz.js",
     "README.md"
   ],
   "scripts": {
