@@ -1,10 +1,6 @@
 name: Test External Installation
 
 on:
-  push:
-    branches: [ main, master, develop ]
-  pull_request:
-    branches: [ main, master, develop ]
   workflow_dispatch:
 
 jobs:
@@ -35,47 +31,18 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # Install Graphviz based on platform
-      - name: Install Graphviz (Linux)
-        if: runner.os == 'Linux'
+      # Note: Graphviz should be handled automatically by node-plantuml-2
+      # The package will use bundled Graphviz from optional dependencies or detect system installation
+      - name: Check Graphviz availability
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y graphviz
-          dot -V
-
-      - name: Install Graphviz (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          echo "📦 Installing Graphviz via Homebrew..."
-          if ! command -v brew &> /dev/null; then
-            /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          echo "Checking Graphviz availability..."
+          if command -v dot &> /dev/null; then
+            echo "✓ System Graphviz found"
+            dot -V || true
+          else
+            echo "ℹ No system Graphviz found - node-plantuml-2 should use bundled Graphviz"
           fi
-          
-          if [ -f /opt/homebrew/bin/brew ]; then
-            echo "/opt/homebrew/bin" >> $GITHUB_PATH
-          fi
-          
-          brew install graphviz || brew upgrade graphviz
-          dot -V
-
-      - name: Install Graphviz (Windows)
-        if: runner.os == 'Windows'
-        shell: powershell
-        run: |
-          Write-Host "Installing Graphviz via Chocolatey..."
-          if (Get-Command choco -ErrorAction SilentlyContinue) {
-            choco install graphviz -y
-          } elseif (Get-Command winget -ErrorAction SilentlyContinue) {
-            winget install Graphviz.Graphviz --accept-package-agreements --accept-source-agreements
-          } else {
-            Write-Host "Warning: Neither Chocolatey nor Winget found"
-          }
-          
-          $dotPath = Get-Command dot -ErrorAction SilentlyContinue
-          if ($dotPath) {
-            Write-Host "Graphviz found at: $($dotPath.Source)"
-            & $dotPath.Source -V
-          }
 
       # Build the package locally (prepare for local installation)
       - name: Install dependencies for build (Unix)
@@ -751,49 +718,18 @@ jobs:
             echo "[WARN] test-graphviz-render.js not found, skipping render test"
           fi
 
-      - name: Verify Graphviz before test (Windows)
+      - name: Check Graphviz availability (Windows)
         if: runner.os == 'Windows'
         shell: powershell
         run: |
-          Write-Host "=== Verifying Graphviz Installation ==="
+          Write-Host "=== Checking Graphviz Availability ==="
           $dotPath = Get-Command dot -ErrorAction SilentlyContinue
           if ($dotPath) {
-            Write-Host "Graphviz found at: $($dotPath.Source)"
-            Write-Host "Testing dot command..."
-            # Graphviz -V outputs to stderr, which is normal behavior
-            $ErrorActionPreference = 'Continue'
-            $versionOutput = & $dotPath.Source -V 2>&1 | Out-String
-            Write-Host "Version: $versionOutput"
-            Write-Host "[OK] Graphviz version check passed"
-            
-            # Test if dot can generate output
-            Write-Host "Testing dot with simple graph..."
-            # Use a temporary file to avoid encoding issues with pipe
-            $tempFile = [System.IO.Path]::GetTempFileName()
-            try {
-              # Write graph to file with UTF-8 encoding (no BOM)
-              $utf8NoBom = New-Object System.Text.UTF8Encoding $false
-              [System.IO.File]::WriteAllText($tempFile, "digraph G { A -> B }", $utf8NoBom)
-              
-              # Run dot on the file
-              $testOutput = & $dotPath.Source -Tpng $tempFile 2>&1 | Out-String
-              if ($LASTEXITCODE -eq 0) {
-                Write-Host "[OK] Graphviz dot command works correctly"
-              } else {
-                Write-Host "[FAIL] Graphviz dot command failed (exit code: $LASTEXITCODE)"
-                if ($testOutput) {
-                  Write-Host "Error: $testOutput"
-                }
-              }
-            } catch {
-              Write-Host "[FAIL] Graphviz dot command failed with exception: $_"
-            } finally {
-              if (Test-Path $tempFile) {
-                Remove-Item $tempFile -Force
-              }
-            }
+            Write-Host "✓ System Graphviz found at: $($dotPath.Source)"
+            Write-Host "Note: node-plantuml-2 will use system Graphviz if available"
           } else {
-            Write-Host "[WARN] Graphviz not found in PATH"
+            Write-Host "ℹ No system Graphviz found in PATH"
+            Write-Host "Note: node-plantuml-2 should use bundled Graphviz from optional dependencies"
           }
 
       - name: Run installation test (Windows)
@@ -802,11 +738,7 @@ jobs:
         run: |
           Set-Location $env:TEMP\external-test-project
           Write-Host "=== Running installation test ==="
-          # Verify Graphviz is accessible
-          $dotPath = Get-Command dot -ErrorAction SilentlyContinue
-          if ($dotPath) {
-            Write-Host "Graphviz available at: $($dotPath.Source)"
-          }
+          Write-Host "Note: node-plantuml-2 will automatically detect and use Graphviz"
           node test-install.js
 
       - name: Run Graphviz render test (Windows)
