@@ -18,9 +18,9 @@ var PLANTUML_JAR = path.join(JAR_DIR_PATH, 'plantuml.jar')
 var GITHUB_API_LATEST = 'https://api.github.com/repos/plantuml/plantuml/releases/latest'
 var GITHUB_RELEASES_BASE = 'https://github.com/plantuml/plantuml/releases/download/'
 
-// License type: MIT (default), LGPL, ASL, BSD, EPL, MIT
-var LICENSE_TYPE = process.env.PLANTUML_LICENSE || 'MIT'
-var LICENSE_SUFFIX = LICENSE_TYPE === 'MIT' ? '' : '-' + LICENSE_TYPE.toLowerCase()
+// License type: GPL (default), LGPL, ASL, BSD, EPL, MIT
+var LICENSE_TYPE = process.env.PLANTUML_LICENSE || 'GPL'
+var LICENSE_SUFFIX = LICENSE_TYPE === 'GPL' ? '' : '-' + LICENSE_TYPE.toLowerCase()
 
 if (!fs.existsSync(JAR_DIR_PATH)) {
   fs.mkdirSync(JAR_DIR_PATH)
