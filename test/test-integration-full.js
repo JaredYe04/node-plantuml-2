@@ -108,12 +108,54 @@ try {
       var env = getEnvWithLibPath(dotPath)
       var libPath = dotResolver.getBundledGraphvizLibPath(dotPath)
       if (libPath) {
+        // Ensure libPath is absolute
+        libPath = path.resolve(libPath)
+        
         console.log('  Library path:', libPath)
         console.log('  LD_LIBRARY_PATH:', env.LD_LIBRARY_PATH || env.DYLD_LIBRARY_PATH || 'not set')
         // Verify lib directory exists
         if (fs.existsSync(libPath)) {
           var libFiles = fs.readdirSync(libPath).filter(function (f) { return f.includes('libgvc') || f.includes('libgraph') })
           console.log('  Found library files:', libFiles.length > 0 ? libFiles.slice(0, 5).join(', ') : 'none')
+          
+          // On Linux, check and create missing symlinks for library files
+          if (os.platform() === 'linux') {
+            // Find library files that need symlinks (e.g., libgvc.so.6.0.0 needs libgvc.so.6)
+            libFiles.forEach(function (libFile) {
+              // Match pattern: libname.so.major.minor.patch (e.g., libgvc.so.6.0.0)
+              var match = libFile.match(/^(lib\w+)\.so\.(\d+)\.(\d+)\.(\d+)$/)
+              if (match) {
+                var libBase = match[1] // e.g., libgvc
+                var major = match[2] // e.g., 6
+                var minor = match[3] // e.g., 0
+                var patch = match[4] // e.g., 0
+                
+                // Create symlinks: libgvc.so.6 -> libgvc.so.6.0.0
+                var symlinkPath = path.join(libPath, libBase + '.so.' + major)
+                var targetPath = libFile
+                
+                if (!fs.existsSync(symlinkPath)) {
+                  try {
+                    fs.symlinkSync(targetPath, symlinkPath)
+                    console.log('  ✓ Created symlink:', path.basename(symlinkPath), '->', targetPath)
+                  } catch (symlinkErr) {
+                    // Ignore symlink creation errors (may already exist or permission issue)
+                  }
+                }
+                
+                // Also create libgvc.so -> libgvc.so.6 symlink
+                var soSymlinkPath = path.join(libPath, libBase + '.so')
+                if (!fs.existsSync(soSymlinkPath)) {
+                  try {
+                    fs.symlinkSync(libBase + '.so.' + major, soSymlinkPath)
+                    console.log('  ✓ Created symlink:', path.basename(soSymlinkPath), '->', libBase + '.so.' + major)
+                  } catch (symlinkErr) {
+                    // Ignore symlink creation errors
+                  }
+                }
+              }
+            })
+          }
         } else {
           console.log('  Warning: Library directory does not exist:', libPath)
         }

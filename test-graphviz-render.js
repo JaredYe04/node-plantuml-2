@@ -109,7 +109,6 @@ function testDiagram(code, format, filename, testName) {
       var chunks = []
       var stderrChunks = []
       var hasError = false
-      var errorMessage = ''
       
       gen.out.on('data', function (chunk) {
         chunks.push(chunk)
@@ -117,7 +116,6 @@ function testDiagram(code, format, filename, testName) {
       
       gen.out.on('error', function (err) {
         hasError = true
-        errorMessage = err.message
         logTest(testName, false, 'Stream error: ' + err.message)
         resolve(false)
       })
