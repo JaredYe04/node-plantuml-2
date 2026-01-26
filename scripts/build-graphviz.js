@@ -863,6 +863,7 @@ function buildGraphviz () {
         }
         var libCopiedCount = 0
         var libFailedCount = 0
+        var copiedLibFiles = new Set() // Track copied library files to avoid duplicates
         for (var libIdx = 0; libIdx < libDir.length; libIdx++) {
           var libInfo = libDir[libIdx]
           var srcLibPath = path.join(libInfo.dir, libInfo.file)
@@ -876,17 +877,63 @@ function buildGraphviz () {
                 // Follow symlink and copy the actual file
                 var resolvedLibPath = fs.realpathSync(srcLibPath)
                 if (fs.existsSync(resolvedLibPath)) {
-                  fs.copyFileSync(resolvedLibPath, destLibPath)
-                  console.log('  ✓ Copied:', libInfo.file, '(resolved from symlink)')
-                  libCopiedCount++
+                  var resolvedBasename = path.basename(resolvedLibPath)
+                  var resolvedDestPath = path.join(destLibDir, resolvedBasename)
+                  
+                  // Copy the actual library file (target of symlink) if not already copied
+                  var targetCopied = false
+                  if (!fs.existsSync(resolvedDestPath) && !copiedLibFiles.has(resolvedBasename)) {
+                    fs.copyFileSync(resolvedLibPath, resolvedDestPath)
+                    console.log('  ✓ Copied:', resolvedBasename, '(target of', libInfo.file + ')')
+                    libCopiedCount++
+                    copiedLibFiles.add(resolvedBasename)
+                    targetCopied = true
+                  } else if (copiedLibFiles.has(resolvedBasename)) {
+                    targetCopied = true
+                  }
+                  
+                  // Also create a symlink with the original name if names are different
+                  // This ensures libraries can be found by their soname (e.g., libcgraph.so.6)
+                  if (libInfo.file !== resolvedBasename && !fs.existsSync(destLibPath) && !copiedLibFiles.has(libInfo.file)) {
+                    try {
+                      // Create a symlink pointing to the actual file
+                      fs.symlinkSync(resolvedBasename, destLibPath)
+                      console.log('  ✓ Created symlink:', libInfo.file, '->', resolvedBasename)
+                      copiedLibFiles.add(libInfo.file)
+                      // Don't increment libCopiedCount for symlink, only for actual file
+                    } catch (symlinkErr) {
+                      // If symlink creation fails, just copy the file as fallback
+                      if (!targetCopied) {
+                        fs.copyFileSync(resolvedLibPath, destLibPath)
+                        console.log('  ✓ Copied:', libInfo.file, '(as file, symlink failed)')
+                        libCopiedCount++
+                        copiedLibFiles.add(libInfo.file)
+                      } else {
+                        // Target already copied, but symlink failed - try to copy with original name too
+                        fs.copyFileSync(resolvedLibPath, destLibPath)
+                        console.log('  ✓ Copied:', libInfo.file, '(as file, symlink failed, target already exists)')
+                        copiedLibFiles.add(libInfo.file)
+                      }
+                    }
+                  } else if (libInfo.file === resolvedBasename && !targetCopied) {
+                    // Same name, just copy it
+                    fs.copyFileSync(resolvedLibPath, destLibPath)
+                    console.log('  ✓ Copied:', libInfo.file, '(resolved from symlink)')
+                    libCopiedCount++
+                    copiedLibFiles.add(libInfo.file)
+                  }
                 } else {
                   console.log('  ✗ Failed: Symlink target not found for', libInfo.file)
                   libFailedCount++
                 }
               } else {
-                fs.copyFileSync(srcLibPath, destLibPath)
-                console.log('  ✓ Copied:', libInfo.file)
-                libCopiedCount++
+                // Regular file, copy it
+                if (!fs.existsSync(destLibPath) && !copiedLibFiles.has(libInfo.file)) {
+                  fs.copyFileSync(srcLibPath, destLibPath)
+                  console.log('  ✓ Copied:', libInfo.file)
+                  libCopiedCount++
+                  copiedLibFiles.add(libInfo.file)
+                }
               }
             } else {
               console.log('  ✗ Not found:', srcLibPath)
