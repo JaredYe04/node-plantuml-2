@@ -366,12 +366,97 @@ jobs:
             fi
           fi
 
+      - name: Configure npm authentication (Windows)
+        if: matrix.platform == 'win32'
+        shell: powershell
+        run: |
+          Write-Host "🔧 Configuring npm authentication for Windows..."
+          $token = "${{ secrets.NPM_TOKEN }}"
+          if ([string]::IsNullOrEmpty($token)) {
+            Write-Host "❌ Error: NODE_AUTH_TOKEN is not set"
+            exit 1
+          }
+          
+          # Method 1: Try npm config set
+          Write-Host "Attempting to configure via npm config..."
+          $configKey = "//registry.npmjs.org/:_authToken"
+          $result = npm config set $configKey $token 2>&1
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "✅ npm authentication configured via npm config"
+          } else {
+            Write-Host "⚠️  npm config failed, trying direct .npmrc write..."
+            # Method 2: Write .npmrc directly
+            $npmrcPath = Join-Path $env:USERPROFILE ".npmrc"
+            $authLine = "//registry.npmjs.org/:_authToken=$token"
+            
+            # Read existing content if it exists
+            $existingContent = ""
+            if (Test-Path $npmrcPath) {
+              $existingContent = Get-Content $npmrcPath -Raw
+            }
+            
+            # Remove any existing auth token lines
+            $lines = $existingContent -split "`n" | Where-Object { 
+              $_ -notmatch "//registry\.npmjs\.org/:_authToken" 
+            }
+            
+            # Add new auth token
+            $newContent = ($lines + $authLine) -join "`n"
+            if (-not $newContent.EndsWith("`n")) {
+              $newContent += "`n"
+            }
+            
+            try {
+              Set-Content -Path $npmrcPath -Value $newContent -NoNewline
+              Write-Host "✅ npm authentication configured via .npmrc file"
+            } catch {
+              Write-Host "❌ Error writing .npmrc: $_"
+              exit 1
+            }
+          }
+          
+          # Verify .npmrc exists and contains token
+          $npmrcPath = Join-Path $env:USERPROFILE ".npmrc"
+          if (Test-Path $npmrcPath) {
+            $content = Get-Content $npmrcPath -Raw
+            if ($content -match "_authToken") {
+              Write-Host "✅ .npmrc file verified"
+            } else {
+              Write-Host "⚠️  Warning: .npmrc exists but no auth token found"
+            }
+          } else {
+            Write-Host "⚠️  Warning: .npmrc file not found"
+          }
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Verify NPM authentication
         shell: bash
         run: |
           echo "🔍 Verifying npm authentication..."
           npm whoami || {
             echo "❌ Error: Not authenticated to npm"
+            echo "Attempting to debug..."
+            if [ "${{ matrix.platform }}" = "win32" ]; then
+              echo "Windows platform detected"
+              echo "Checking .npmrc location..."
+              if [ -f "$USERPROFILE/.npmrc" ]; then
+                echo "Found .npmrc at: $USERPROFILE/.npmrc"
+                echo "First few lines (sanitized):"
+                head -n 3 "$USERPROFILE/.npmrc" 2>/dev/null | sed 's/_authToken=.*/_authToken=***/' || echo "Could not read .npmrc"
+              else
+                echo ".npmrc not found at: $USERPROFILE/.npmrc"
+              fi
+            else
+              echo "Checking .npmrc location..."
+              if [ -f "$HOME/.npmrc" ]; then
+                echo "Found .npmrc at: $HOME/.npmrc"
+                echo "First few lines (sanitized):"
+                head -n 3 "$HOME/.npmrc" | sed 's/_authToken=.*/_authToken=***/'
+              else
+                echo ".npmrc not found at: $HOME/.npmrc"
+              fi
+            fi
             exit 1
           }
           echo "✅ Successfully authenticated to npm"
@@ -516,7 +601,8 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Install Graphviz (for building package)
+      - name: Install Graphviz (for building package - macOS/Linux)
+        if: matrix.platform != 'win32'
         shell: bash
         run: |
           echo "📦 Installing Graphviz for package building..."
@@ -534,16 +620,108 @@ jobs:
             # Linux: Install via apt-get
             sudo apt-get update
             sudo apt-get install -y graphviz
-          elif [ "${{ matrix.platform }}" = "win32" ]; then
-            # Windows: Try Chocolatey or Winget
-            if command -v choco &> /dev/null; then
-              choco install graphviz -y
-            elif command -v winget &> /dev/null; then
-              winget install Graphviz.Graphviz --accept-package-agreements --accept-source-agreements
-            else
-              echo "⚠️  Please install Graphviz manually on Windows"
-            fi
           fi
+
+      - name: Install Graphviz (for building package - Windows)
+        if: matrix.platform == 'win32'
+        shell: powershell
+        run: |
+          Write-Host "📦 Installing Graphviz for package building on Windows..."
+          $ErrorActionPreference = 'Continue'
+          $installed = $false
+          
+          # Method 1: Try Winget first (usually more reliable)
+          if (Get-Command winget -ErrorAction SilentlyContinue) {
+            Write-Host "🔄 Attempting to install Graphviz via Winget..."
+            for ($i = 1; $i -le 3; $i++) {
+              try {
+                $null = winget install Graphviz.Graphviz --accept-package-agreements --accept-source-agreements --silent 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                  Write-Host "✅ Graphviz installed successfully via Winget"
+                  $installed = $true
+                  break
+                }
+              } catch {
+                Write-Host "⚠️  Winget attempt $i failed: $_"
+              }
+              if (-not $installed) {
+                Write-Host "⚠️  Winget attempt $i failed, retrying..."
+                Start-Sleep -Seconds 5
+              }
+            }
+          }
+          
+          # Method 2: Try Chocolatey with retries (if Winget failed)
+          if (-not $installed -and (Get-Command choco -ErrorAction SilentlyContinue)) {
+            Write-Host "🔄 Attempting to install Graphviz via Chocolatey..."
+            for ($i = 1; $i -le 3; $i++) {
+              try {
+                # Clear Chocolatey cache to avoid stale packages
+                if ($i -gt 1) {
+                  Write-Host "   Clearing Chocolatey cache before retry..."
+                  choco cache remove graphviz --expired -y 2>&1 | Out-Null
+                }
+                $output = choco install graphviz -y 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                  Write-Host "✅ Graphviz installed successfully via Chocolatey"
+                  $installed = $true
+                  break
+                } else {
+                  Write-Host "   Chocolatey output: $output"
+                }
+              } catch {
+                Write-Host "⚠️  Chocolatey attempt $i failed: $_"
+              }
+              if (-not $installed) {
+                Write-Host "⚠️  Chocolatey attempt $i failed, retrying in 10 seconds..."
+                Start-Sleep -Seconds 10
+              }
+            }
+          }
+          
+          # Method 3: Direct download and install (fallback)
+          if (-not $installed) {
+            Write-Host "🔄 Attempting to download and install Graphviz directly..."
+            $graphvizUrl = "https://gitlab.com/api/v4/projects/4207231/packages/generic/graphviz-releases/10.0.1/windows_10_cmake_Release_graphviz-install-10.0.1-win64.exe"
+            $installerPath = Join-Path $env:TEMP "graphviz-installer.exe"
+            
+            try {
+              Write-Host "📥 Downloading Graphviz installer from $graphvizUrl..."
+              Invoke-WebRequest -Uri $graphvizUrl -OutFile $installerPath -UseBasicParsing -TimeoutSec 300
+              Write-Host "📥 Downloaded Graphviz installer, installing..."
+              $process = Start-Process -FilePath $installerPath -ArgumentList "/S" -Wait -NoNewWindow -PassThru
+              if ($process.ExitCode -eq 0) {
+                Write-Host "✅ Graphviz installed successfully via direct download"
+                $installed = $true
+              } else {
+                Write-Host "⚠️  Installer exited with code $($process.ExitCode)"
+              }
+              Remove-Item $installerPath -ErrorAction SilentlyContinue
+            } catch {
+              Write-Host "⚠️  Direct download failed: $_"
+            }
+          }
+          
+          if (-not $installed) {
+            Write-Host "❌ All installation methods failed"
+            Write-Host "⚠️  Please install Graphviz manually on Windows"
+            exit 1
+          }
+          
+          # Verify installation
+          $dotPath = Get-Command dot -ErrorAction SilentlyContinue
+          if ($dotPath) {
+            Write-Host "✅ Graphviz verified: $($dotPath.Source)"
+            & $dotPath.Source -V
+          } else {
+            Write-Host "⚠️  Warning: Graphviz installed but 'dot' command not found in PATH"
+            Write-Host "   Trying to refresh PATH..."
+            $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+            $dotPath = Get-Command dot -ErrorAction SilentlyContinue
+            if ($dotPath) {
+              Write-Host "✅ Graphviz found after PATH refresh: $($dotPath.Source)"
+            }
+          }
 
       - name: Verify Graphviz installation
         shell: bash
@@ -674,12 +852,97 @@ jobs:
             ls -la runtimes/@node-plantuml-2/ || echo "Parent directory does not exist"
           fi
 
+      - name: Configure npm authentication (Windows)
+        if: matrix.platform == 'win32'
+        shell: powershell
+        run: |
+          Write-Host "🔧 Configuring npm authentication for Windows..."
+          $token = "${{ secrets.NPM_TOKEN }}"
+          if ([string]::IsNullOrEmpty($token)) {
+            Write-Host "❌ Error: NODE_AUTH_TOKEN is not set"
+            exit 1
+          }
+          
+          # Method 1: Try npm config set
+          Write-Host "Attempting to configure via npm config..."
+          $configKey = "//registry.npmjs.org/:_authToken"
+          $result = npm config set $configKey $token 2>&1
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "✅ npm authentication configured via npm config"
+          } else {
+            Write-Host "⚠️  npm config failed, trying direct .npmrc write..."
+            # Method 2: Write .npmrc directly
+            $npmrcPath = Join-Path $env:USERPROFILE ".npmrc"
+            $authLine = "//registry.npmjs.org/:_authToken=$token"
+            
+            # Read existing content if it exists
+            $existingContent = ""
+            if (Test-Path $npmrcPath) {
+              $existingContent = Get-Content $npmrcPath -Raw
+            }
+            
+            # Remove any existing auth token lines
+            $lines = $existingContent -split "`n" | Where-Object { 
+              $_ -notmatch "//registry\.npmjs\.org/:_authToken" 
+            }
+            
+            # Add new auth token
+            $newContent = ($lines + $authLine) -join "`n"
+            if (-not $newContent.EndsWith("`n")) {
+              $newContent += "`n"
+            }
+            
+            try {
+              Set-Content -Path $npmrcPath -Value $newContent -NoNewline
+              Write-Host "✅ npm authentication configured via .npmrc file"
+            } catch {
+              Write-Host "❌ Error writing .npmrc: $_"
+              exit 1
+            }
+          }
+          
+          # Verify .npmrc exists and contains token
+          $npmrcPath = Join-Path $env:USERPROFILE ".npmrc"
+          if (Test-Path $npmrcPath) {
+            $content = Get-Content $npmrcPath -Raw
+            if ($content -match "_authToken") {
+              Write-Host "✅ .npmrc file verified"
+            } else {
+              Write-Host "⚠️  Warning: .npmrc exists but no auth token found"
+            }
+          } else {
+            Write-Host "⚠️  Warning: .npmrc file not found"
+          }
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Verify NPM authentication
         shell: bash
         run: |
           echo "🔍 Verifying npm authentication..."
           npm whoami || {
             echo "❌ Error: Not authenticated to npm"
+            echo "Attempting to debug..."
+            if [ "${{ matrix.platform }}" = "win32" ]; then
+              echo "Windows platform detected"
+              echo "Checking .npmrc location..."
+              if [ -f "$USERPROFILE/.npmrc" ]; then
+                echo "Found .npmrc at: $USERPROFILE/.npmrc"
+                echo "First few lines (sanitized):"
+                head -n 3 "$USERPROFILE/.npmrc" 2>/dev/null | sed 's/_authToken=.*/_authToken=***/' || echo "Could not read .npmrc"
+              else
+                echo ".npmrc not found at: $USERPROFILE/.npmrc"
+              fi
+            else
+              echo "Checking .npmrc location..."
+              if [ -f "$HOME/.npmrc" ]; then
+                echo "Found .npmrc at: $HOME/.npmrc"
+                echo "First few lines (sanitized):"
+                head -n 3 "$HOME/.npmrc" | sed 's/_authToken=.*/_authToken=***/'
+              else
+                echo ".npmrc not found at: $HOME/.npmrc"
+              fi
+            fi
             exit 1
           }
           echo "✅ Successfully authenticated to npm"

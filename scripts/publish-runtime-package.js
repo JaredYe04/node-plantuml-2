@@ -195,13 +195,14 @@ if (nodeAuthToken) {
   // Use npm config set to configure authentication token
   // This works on all platforms and handles .npmrc location automatically
   var registryUrl = 'https://registry.npmjs.org/'
-  var configKey = registryUrl + ':_authToken'
+  var configKey = '//registry.npmjs.org/:_authToken'  // Use // prefix for better compatibility
   
   try {
     var configResult = childProcess.spawnSync('npm', ['config', 'set', configKey, nodeAuthToken], {
       encoding: 'utf-8',
       stdio: 'pipe',
-      env: Object.assign({}, process.env, { NODE_AUTH_TOKEN: nodeAuthToken })
+      env: Object.assign({}, process.env, { NODE_AUTH_TOKEN: nodeAuthToken }),
+      shell: os.platform() === 'win32'  // Use shell on Windows for better compatibility
     })
     
     if (configResult.status === 0) {
@@ -211,23 +212,34 @@ if (nodeAuthToken) {
       if (configResult.stderr) {
         console.error('   Error:', configResult.stderr.trim())
       }
+      if (configResult.stdout) {
+        console.error('   Output:', configResult.stdout.trim())
+      }
       // Fallback: try to write .npmrc directly
       try {
         var npmrcPath = path.join(os.homedir(), '.npmrc')
-        var authLine = registryUrl + ':_authToken=' + nodeAuthToken + '\n'
+        // On Windows, also try USERPROFILE if HOME is not set
+        if (os.platform() === 'win32' && !process.env.HOME) {
+          npmrcPath = path.join(process.env.USERPROFILE || os.homedir(), '.npmrc')
+        }
+        var authLine = '//registry.npmjs.org/:_authToken=' + nodeAuthToken + '\n'
         var existingContent = ''
         if (fs.existsSync(npmrcPath)) {
           existingContent = fs.readFileSync(npmrcPath, 'utf8')
         }
         var lines = existingContent.split('\n')
         var filteredLines = lines.filter(function (line) {
-          return !line.includes(registryUrl) || !line.includes('_authToken')
+          // Remove any existing auth token lines for this registry
+          return !line.includes('//registry.npmjs.org/:_authToken') && 
+                 !line.includes('registry.npmjs.org/:_authToken')
         })
         filteredLines.push(authLine.trim())
         fs.writeFileSync(npmrcPath, filteredLines.join('\n') + '\n')
         console.log('✓ npm authentication configured (fallback method)')
+        console.log('   .npmrc location:', npmrcPath)
       } catch (e) {
         console.error('⚠️  Warning: Could not write .npmrc file:', e.message)
+        console.error('   File path attempted:', npmrcPath)
         console.error('   Continuing anyway...')
       }
     }
