@@ -434,14 +434,35 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         continue-on-error: true
 
+      - name: Verify JRE package
+        shell: bash
+        run: |
+          echo "🔍 Verifying JRE package before publishing..."
+          # Basic verification - check Java executable exists and works
+          if [ "${{ matrix.platform }}" = "win32" ]; then
+            JAVA_EXE="runtimes/@node-plantuml-2/jre-${{ matrix.platform }}-${{ matrix.arch }}/jre/bin/java.exe"
+          else
+            JAVA_EXE="runtimes/@node-plantuml-2/jre-${{ matrix.platform }}-${{ matrix.arch }}/jre/bin/java"
+          fi
+          
+          if [ ! -f "$JAVA_EXE" ]; then
+            echo "❌ Error: Java executable not found"
+            exit 1
+          fi
+          
+          echo "✓ Java executable found"
+          "$JAVA_EXE" -version || {
+            echo "❌ Error: Java executable does not work"
+            exit 1
+          }
+          echo "✅ JRE package verification passed"
+
       - name: Publish runtime package
         if: steps.check-version.outputs.exists != 'true'
         shell: bash
         run: |
           echo "📦 Publishing ${{ matrix.package }}@${{ needs.prepare.outputs.version }}..."
-          cd runtimes/@node-plantuml-2/jre-${{ matrix.platform }}-${{ matrix.arch }}
-          npm publish --access public
-          echo "✅ Published ${{ matrix.package }}@${{ needs.prepare.outputs.version }}"
+          node scripts/publish-runtime-package.js jre ${{ matrix.platform }} ${{ matrix.arch }} --version ${{ needs.prepare.outputs.version }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -675,14 +696,91 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         continue-on-error: true
 
+      - name: Verify Graphviz package structure
+        shell: bash
+        run: |
+          echo "🔍 Verifying Graphviz package structure..."
+          node scripts/verify-graphviz-package.js ${{ matrix.platform }} ${{ matrix.arch }}
+          if [ $? -ne 0 ]; then
+            echo "❌ Graphviz package structure verification failed"
+            exit 1
+          fi
+          echo "✅ Graphviz package structure verification passed"
+
+      - name: Setup Java for testing
+        shell: bash
+        run: |
+          echo "☕ Setting up Java for end-to-end testing..."
+          # Check if bundled JRE exists, otherwise use system Java
+          if [ "${{ matrix.platform }}" = "win32" ]; then
+            JRE_PATH="runtimes/@node-plantuml-2/jre-${{ matrix.platform }}-${{ matrix.arch }}/jre/bin/java.exe"
+          else
+            JRE_PATH="runtimes/@node-plantuml-2/jre-${{ matrix.platform }}-${{ matrix.arch }}/jre/bin/java"
+          fi
+          
+          if [ -f "$JRE_PATH" ]; then
+            echo "✓ Using bundled JRE: $JRE_PATH"
+            chmod +x "$JRE_PATH" || true
+            "$JRE_PATH" -version
+          else
+            echo "⚠️  Bundled JRE not found, using system Java"
+            java -version || {
+              echo "❌ No Java found (neither bundled nor system)"
+              exit 1
+            }
+          fi
+
+      - name: Download PlantUML JAR for testing
+        shell: bash
+        run: |
+          echo "📥 Downloading PlantUML JAR for testing..."
+          if [ ! -f "vendor/plantuml.jar" ]; then
+            node scripts/get-plantuml-jar.js --latest || {
+              echo "❌ Failed to download PlantUML JAR"
+              exit 1
+            }
+          else
+            echo "✓ PlantUML JAR already exists"
+          fi
+
+      - name: End-to-end test: Generate PlantUML diagrams with Graphviz
+        shell: bash
+        run: |
+          echo "🧪 Running end-to-end test: Generating PlantUML diagrams with Graphviz..."
+          echo ""
+          node scripts/test-graphviz-package-end-to-end.js ${{ matrix.platform }} ${{ matrix.arch }} ./test-output-graphviz-e2e
+          if [ $? -ne 0 ]; then
+            echo ""
+            echo "❌ End-to-end test failed! Graphviz package cannot generate diagrams."
+            exit 1
+          fi
+          echo ""
+          echo "✅ End-to-end test passed! Graphviz package works correctly."
+
+      - name: Upload generated diagrams as artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: graphviz-test-output-${{ matrix.platform }}-${{ matrix.arch }}
+          path: test-output-graphviz-e2e/*.png
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Upload generated SVG diagrams as artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: graphviz-test-output-svg-${{ matrix.platform }}-${{ matrix.arch }}
+          path: test-output-graphviz-e2e/*.svg
+          retention-days: 7
+          if-no-files-found: warn
+
       - name: Publish Graphviz runtime package
         if: steps.check-version-graphviz.outputs.exists != 'true'
         shell: bash
         run: |
           echo "📦 Publishing ${{ matrix.package }}@${{ needs.prepare.outputs.version }}..."
-          cd runtimes/@node-plantuml-2/graphviz-${{ matrix.platform }}-${{ matrix.arch }}
-          npm publish --access public
-          echo "✅ Published ${{ matrix.package }}@${{ needs.prepare.outputs.version }}"
+          node scripts/publish-runtime-package.js graphviz ${{ matrix.platform }} ${{ matrix.arch }} --version ${{ needs.prepare.outputs.version }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

@@ -2,7 +2,12 @@
 'use strict'
 
 /**
- * Publish runtime package script
+ * Publish runtime package script (DEPRECATED)
+ *
+ * ⚠️  This script is deprecated. Please use the unified script:
+ *   node scripts/publish-runtime-package.js jre <platform> <arch>
+ *
+ * This script is kept for backward compatibility and will delegate to the new script.
  *
  * Usage:
  *   node scripts/publish-runtime.js <platform> <arch> [--dry-run]
@@ -19,11 +24,37 @@ var PLATFORM = process.argv[2]
 var ARCH = process.argv[3]
 var DRY_RUN = process.argv.indexOf('--dry-run') !== -1
 
+console.warn('⚠️  WARNING: This script is deprecated!')
+console.warn('   Please use: node scripts/publish-runtime-package.js jre <platform> <arch>')
+console.warn('')
+
 if (!PLATFORM || !ARCH) {
   console.error('Usage: node scripts/publish-runtime.js <platform> <arch> [--dry-run]')
   console.error('Example: node scripts/publish-runtime.js win32 x64')
+  console.error('')
+  console.error('⚠️  DEPRECATED: Use scripts/publish-runtime-package.js instead')
   process.exit(1)
 }
+
+// Delegate to new unified script
+var path = require('path')
+var childProcess = require('child_process')
+
+var newScript = path.join(__dirname, 'publish-runtime-package.js')
+var args = ['jre', PLATFORM, ARCH]
+if (DRY_RUN) {
+  args.push('--dry-run')
+}
+
+console.log('Delegating to unified script...')
+console.log('')
+
+var result = childProcess.spawnSync('node', [newScript].concat(args), {
+  stdio: 'inherit',
+  shell: true
+})
+
+process.exit(result.status || 0)
 
 var runtimeDir = path.join(__dirname, '..', 'runtimes', '@node-plantuml-2', 'jre-' + PLATFORM + '-' + ARCH)
 var packageJsonPath = path.join(runtimeDir, 'package.json')

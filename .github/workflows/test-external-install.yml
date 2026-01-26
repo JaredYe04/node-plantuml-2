@@ -764,6 +764,10 @@ jobs:
           var plantuml = require('node-plantuml-2');
           var javaResolver = require('node-plantuml-2/lib/java-resolver');
           var dotResolver = require('node-plantuml-2/lib/dot-resolver');
+          var childProcess = require('child_process');
+          var path = require('path');
+          var os = require('os');
+          var fs = require('fs');
           
           console.log('=== Comprehensive Integration Test ===');
           console.log('');
@@ -776,9 +780,67 @@ jobs:
           var dotPath = dotResolver.resolveDotExecutable({ dotPath: null });
           console.log('Graphviz:', dotPath || 'NOT FOUND');
           
+          if (dotPath) {
+            // Verify dot path exists
+            if (!fs.existsSync(dotPath)) {
+              console.log('[ERROR] Dot path does not exist:', dotPath);
+              process.exit(1);
+            }
+            
+            // Get library path for bundled Graphviz
+            var libPath = dotResolver.getBundledGraphvizLibPath(dotPath);
+            console.log('Graphviz lib path:', libPath || 'NOT FOUND (system Graphviz)');
+            
+            // Test dot directly with proper environment
+            try {
+              var env = Object.assign({}, process.env);
+              var platform = os.platform();
+              
+              if (libPath) {
+                // Set library path for bundled Graphviz
+                libPath = path.resolve(libPath);
+                if (platform === 'linux') {
+                  var existingLibPath = env.LD_LIBRARY_PATH || '';
+                  env.LD_LIBRARY_PATH = libPath + (existingLibPath ? ':' + existingLibPath : '');
+                  console.log('Set LD_LIBRARY_PATH:', env.LD_LIBRARY_PATH);
+                } else if (platform === 'darwin') {
+                  var existingDyldPath = env.DYLD_LIBRARY_PATH || '';
+                  env.DYLD_LIBRARY_PATH = libPath + (existingDyldPath ? ':' + existingDyldPath : '');
+                  console.log('Set DYLD_LIBRARY_PATH:', env.DYLD_LIBRARY_PATH);
+                }
+              }
+              
+              // Test dot -V command
+              var dotVersion = childProcess.execSync('\"' + dotPath + '\" -V', {
+                encoding: 'utf-8',
+                env: env,
+                stdio: ['ignore', 'pipe', 'pipe']
+              });
+              console.log('[OK] Dot version check passed');
+              console.log('Dot version output (first 100 chars):', dotVersion.substring(0, 100));
+            } catch (e) {
+              console.log('[FAIL] Dot version check failed:', e.message);
+              if (e.stderr) {
+                console.log('Stderr:', e.stderr.toString().substring(0, 200));
+              }
+              process.exit(1);
+            }
+          } else {
+            console.log('[WARN] No Graphviz found, testdot may fail');
+          }
+          
+          console.log('');
+          console.log('Testing PlantUML testdot...');
+          
           // Test testdot
           plantuml.testdot(function(isOk) {
             console.log('testdot:', isOk ? 'OK' : 'FAILED');
+            if (!isOk) {
+              console.log('[ERROR] PlantUML testdot failed. This may indicate:');
+              console.log('  1. Graphviz is not properly configured');
+              console.log('  2. Library paths are not set correctly');
+              console.log('  3. PlantUML cannot execute dot');
+            }
             process.exit(isOk ? 0 : 1);
           });
           "
@@ -795,6 +857,7 @@ jobs:
           var childProcess = require('child_process');
           var path = require('path');
           var os = require('os');
+          var fs = require('fs');
           
           console.log('=== Comprehensive Integration Test ===');
           console.log('');
@@ -806,32 +869,88 @@ jobs:
           console.log('Graphviz:', dotPath || 'NOT FOUND');
           
           if (dotPath) {
+            // Verify dot path exists
+            if (!fs.existsSync(dotPath)) {
+              console.log('[ERROR] Dot path does not exist:', dotPath);
+              process.exit(1);
+            }
+            
+            // Ensure absolute path
+            dotPath = path.resolve(dotPath);
+            // Normalize to Windows format
+            dotPath = dotPath.replace(/\//g, '\\');
+            
             try {
               var dotDir = path.dirname(dotPath);
               var env = Object.assign({}, process.env);
-              if (os.platform() === 'win32') {
-                var binDir = dotDir.replace(/\//g, '\\');
-                env.PATH = binDir + ';' + (env.PATH || '');
-                console.log('Added to PATH:', binDir);
+              
+              // Find PATH key (case-insensitive on Windows)
+              var pathKey = 'PATH';
+              for (var key in process.env) {
+                if (key.toUpperCase() === 'PATH') {
+                  pathKey = key;
+                  break;
+                }
               }
               
+              // Add bin directory to PATH
+              var binDir = dotDir.replace(/\//g, '\\');
+              var existingPath = env[pathKey] || env.PATH || '';
+              
+              // Check if already in PATH
+              var pathEntries = existingPath.split(';');
+              var alreadyInPath = false;
+              for (var j = 0; j < pathEntries.length; j++) {
+                var normalizedEntry = pathEntries[j].replace(/\//g, '\\').toLowerCase().trim();
+                if (normalizedEntry && normalizedEntry === binDir.toLowerCase()) {
+                  alreadyInPath = true;
+                  break;
+                }
+              }
+              
+              if (!alreadyInPath) {
+                env[pathKey] = binDir + (existingPath ? ';' + existingPath : '');
+                env.PATH = env[pathKey];
+                console.log('Added to PATH:', binDir);
+              } else {
+                console.log('Bin directory already in PATH');
+              }
+              
+              // Test dot -V command
               var dotVersion = childProcess.execSync('"' + dotPath + '" -V', {
                 encoding: 'utf-8',
                 env: env,
                 stdio: ['ignore', 'pipe', 'pipe']
               });
               console.log('[OK] Dot version check passed');
+              console.log('Dot version output (first 100 chars):', dotVersion.substring(0, 100));
             } catch (e) {
               console.log('[FAIL] Dot version check failed:', e.message);
+              if (e.stderr) {
+                console.log('Stderr:', e.stderr.toString().substring(0, 200));
+              }
+              process.exit(1);
             }
+          } else {
+            console.log('[WARN] No Graphviz found, testdot may fail');
           }
+          
+          console.log('');
+          console.log('Testing PlantUML testdot...');
           
           plantuml.testdot(function(isOk) {
             console.log('testdot:', isOk ? 'OK' : 'FAILED');
+            if (!isOk) {
+              console.log('[ERROR] PlantUML testdot failed. This may indicate:');
+              console.log('  1. Graphviz is not properly configured');
+              console.log('  2. PATH is not set correctly for DLL loading');
+              console.log('  3. PlantUML cannot execute dot');
+            }
             process.exit(isOk ? 0 : 1);
           });
           '@
-          $testScript | Out-File -FilePath "test-integration.js" -Encoding utf8
+          $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+          [System.IO.File]::WriteAllText("$PWD\test-integration.js", $testScript, $utf8NoBom)
           node test-integration.js
 
       # Upload generated images as artifacts for manual inspection

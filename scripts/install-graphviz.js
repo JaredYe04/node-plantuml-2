@@ -254,8 +254,8 @@ async function installGraphviz () {
   console.log('🔍 Checking if Graphviz is already installed...')
   console.log('')
 
-  // First check if Graphviz is already installed
-  var detected = dotResolver.resolveDotExecutable({ dotPath: null })
+  // First check if Graphviz is already installed (allow system fallback for install script)
+  var detected = dotResolver.resolveDotExecutable({ dotPath: null, allowSystemFallback: true })
   if (detected) {
     console.log('✅ Graphviz is already installed at: ' + detected)
     console.log('')
@@ -290,10 +290,10 @@ async function installGraphviz () {
   }
 
   if (installed) {
-    // Verify installation
+    // Verify installation (allow system fallback for install script)
     console.log('')
     console.log('🔍 Verifying installation...')
-    var newDetected = dotResolver.resolveDotExecutable({ dotPath: null })
+    var newDetected = dotResolver.resolveDotExecutable({ dotPath: null, allowSystemFallback: true })
     if (newDetected) {
       console.log('✅ Graphviz is now available at: ' + newDetected)
       return true
