@@ -201,11 +201,13 @@ for (var i = 0; i < testDiagrams.length; i++) {
   var outputFile = path.join(OUTPUT_DIR, 'test-' + (i + 1) + '-' + testName.toLowerCase().replace(/\s+/g, '-') + '.' + test.format)
   
   console.log('Generating:', testName, '...')
+  console.log('  Input code length:', test.code.length, 'chars')
   
   try {
     // Create temporary input file
     var inputFile = path.join(OUTPUT_DIR, 'input-' + i + '.puml')
     fs.writeFileSync(inputFile, test.code, 'utf8')
+    console.log('  Created input file:', inputFile)
     
     // Build PlantUML command
     // Use absolute path for dot (required by PlantUML Java process)
@@ -217,16 +219,20 @@ for (var i = 0; i < testDiagrams.length; i++) {
     // Use absolute path for input file (PlantUML may need it)
     var absoluteInputFile = path.resolve(inputFile)
     
+    // Use absolute path for output directory (PlantUML requires absolute path for -o)
+    var absoluteOutputDir = path.resolve(OUTPUT_DIR)
+    
     var plantumlArgs = [
       '-Djava.awt.headless=true',
       '-Dfile.encoding=UTF-8',
       '-jar', plantumlJar,
       '-t' + test.format,
-      '-o', OUTPUT_DIR,
+      '-o', absoluteOutputDir,
       '-graphvizdot', absoluteDotPath,
       absoluteInputFile
     ]
     
+    console.log('  Executing PlantUML...')
     var result = childProcess.spawnSync(javaPath, plantumlArgs, {
       cwd: OUTPUT_DIR,
       env: env,
@@ -235,48 +241,75 @@ for (var i = 0; i < testDiagrams.length; i++) {
       timeout: 30000
     })
     
-    // Always log stderr and stdout for debugging when test fails
-    if (result.stderr && result.stderr.length > 0) {
+    console.log('  PlantUML execution completed')
+    // Always log stderr and stdout for debugging
+    console.log('  📋 PlantUML exit code:', result.status !== null && result.status !== undefined ? result.status : 'null')
+    
+    if (result.stderr) {
       var stderrText = result.stderr.trim()
       if (stderrText.length > 0) {
-        console.log('  📋 PlantUML stderr:')
+        console.log('  📋 PlantUML stderr (' + stderrText.length + ' chars):')
         var stderrLines = stderrText.split('\n')
-        stderrLines.slice(0, 20).forEach(function (line) {
+        stderrLines.slice(0, 30).forEach(function (line) {
           console.log('     ' + line)
         })
-        if (stderrLines.length > 20) {
-          console.log('     ... (' + (stderrLines.length - 20) + ' more lines)')
+        if (stderrLines.length > 30) {
+          console.log('     ... (' + (stderrLines.length - 30) + ' more lines)')
         }
+      } else {
+        console.log('  📋 PlantUML stderr: (empty)')
       }
+    } else {
+      console.log('  📋 PlantUML stderr: (null)')
     }
     
-    if (result.stdout && result.stdout.length > 0) {
+    if (result.stdout) {
       var stdoutText = result.stdout.trim()
       if (stdoutText.length > 0) {
-        console.log('  📋 PlantUML stdout:')
+        console.log('  📋 PlantUML stdout (' + stdoutText.length + ' chars):')
         var stdoutLines = stdoutText.split('\n')
-        stdoutLines.slice(0, 20).forEach(function (line) {
+        stdoutLines.slice(0, 30).forEach(function (line) {
           console.log('     ' + line)
         })
-        if (stdoutLines.length > 20) {
-          console.log('     ... (' + (stdoutLines.length - 20) + ' more lines)')
+        if (stdoutLines.length > 30) {
+          console.log('     ... (' + (stdoutLines.length - 30) + ' more lines)')
         }
+      } else {
+        console.log('  📋 PlantUML stdout: (empty)')
       }
+    } else {
+      console.log('  📋 PlantUML stdout: (null)')
     }
     
-    // Log exit code
-    if (result.status !== 0) {
-      console.log('  ⚠️  PlantUML exited with code:', result.status)
+    // List all files in output directory to see what was actually created
+    console.log('  📁 Files in output directory:')
+    try {
+      var files = fs.readdirSync(OUTPUT_DIR)
+      if (files.length > 0) {
+        files.forEach(function (file) {
+          var filePath = path.join(OUTPUT_DIR, file)
+          var stats = fs.statSync(filePath)
+          console.log('     - ' + file + ' (' + (stats.size / 1024).toFixed(2) + ' KB, ' + (stats.isDirectory() ? 'dir' : 'file') + ')')
+        })
+      } else {
+        console.log('     (directory is empty)')
+      }
+    } catch (e) {
+      console.log('     (error listing directory:', e.message + ')')
     }
     
     // Check if output file was created
     // PlantUML creates output file with same name as input file (without .puml extension)
     var inputBaseName = path.basename(inputFile, '.puml')
     var expectedOutput = path.join(OUTPUT_DIR, inputBaseName + '.' + test.format)
-    if (fs.existsSync(expectedOutput)) {
+    // Check both relative and absolute paths
+    var outputFileExists = fs.existsSync(expectedOutput) || fs.existsSync(expectedOutputAbsolute)
+    var actualOutputPath = fs.existsSync(expectedOutput) ? expectedOutput : (fs.existsSync(expectedOutputAbsolute) ? expectedOutputAbsolute : null)
+    
+    if (outputFileExists && actualOutputPath) {
       // Move to desired location
-      if (expectedOutput !== outputFile) {
-        fs.renameSync(expectedOutput, outputFile)
+      if (actualOutputPath !== outputFile) {
+        fs.renameSync(actualOutputPath, outputFile)
       }
       
       var stats = fs.statSync(outputFile)

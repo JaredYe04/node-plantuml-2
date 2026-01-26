@@ -19,6 +19,7 @@
 
 var fs = require('fs')
 var path = require('path')
+var os = require('os')
 var childProcess = require('child_process')
 
 var TYPE = process.argv[2]  // 'jre' or 'graphviz'
@@ -187,16 +188,81 @@ if (DRY_RUN) {
   process.exit(0)
 }
 
+// Configure npm authentication if NODE_AUTH_TOKEN is available
+var nodeAuthToken = process.env.NODE_AUTH_TOKEN
+if (nodeAuthToken) {
+  console.log('Configuring npm authentication from NODE_AUTH_TOKEN...')
+  // Use npm config set to configure authentication token
+  // This works on all platforms and handles .npmrc location automatically
+  var registryUrl = 'https://registry.npmjs.org/'
+  var configKey = registryUrl + ':_authToken'
+  
+  try {
+    var configResult = childProcess.spawnSync('npm', ['config', 'set', configKey, nodeAuthToken], {
+      encoding: 'utf-8',
+      stdio: 'pipe',
+      env: Object.assign({}, process.env, { NODE_AUTH_TOKEN: nodeAuthToken })
+    })
+    
+    if (configResult.status === 0) {
+      console.log('✓ npm authentication configured')
+    } else {
+      console.error('⚠️  Warning: Could not configure npm authentication via npm config')
+      if (configResult.stderr) {
+        console.error('   Error:', configResult.stderr.trim())
+      }
+      // Fallback: try to write .npmrc directly
+      try {
+        var npmrcPath = path.join(os.homedir(), '.npmrc')
+        var authLine = registryUrl + ':_authToken=' + nodeAuthToken + '\n'
+        var existingContent = ''
+        if (fs.existsSync(npmrcPath)) {
+          existingContent = fs.readFileSync(npmrcPath, 'utf8')
+        }
+        var lines = existingContent.split('\n')
+        var filteredLines = lines.filter(function (line) {
+          return !line.includes(registryUrl) || !line.includes('_authToken')
+        })
+        filteredLines.push(authLine.trim())
+        fs.writeFileSync(npmrcPath, filteredLines.join('\n') + '\n')
+        console.log('✓ npm authentication configured (fallback method)')
+      } catch (e) {
+        console.error('⚠️  Warning: Could not write .npmrc file:', e.message)
+        console.error('   Continuing anyway...')
+      }
+    }
+  } catch (e) {
+    console.error('⚠️  Warning: Could not configure npm authentication:', e.message)
+    console.error('   Continuing anyway...')
+  }
+  console.log('')
+}
+
 // Check if logged in to npm
 console.log('Checking npm login status...')
+var loginCheckEnv = {}
+if (nodeAuthToken) {
+  loginCheckEnv.NODE_AUTH_TOKEN = nodeAuthToken
+}
 var loginCheck = childProcess.spawnSync('npm', ['whoami'], {
   encoding: 'utf-8',
-  stdio: 'pipe'
+  stdio: 'pipe',
+  env: Object.assign({}, process.env, loginCheckEnv)
 })
 
 if (loginCheck.status !== 0) {
   console.error('❌ Error: Not logged in to npm')
-  console.error('Please run: npm login')
+  if (loginCheck.stderr) {
+    console.error('Error details:', loginCheck.stderr.trim())
+  }
+  if (loginCheck.stdout) {
+    console.error('Output:', loginCheck.stdout.trim())
+  }
+  console.error('')
+  console.error('Troubleshooting:')
+  console.error('  1. Ensure NODE_AUTH_TOKEN environment variable is set')
+  console.error('  2. Check that .npmrc file exists and contains authentication token')
+  console.error('  3. Try running: npm login')
   process.exit(1)
 }
 
@@ -205,9 +271,14 @@ console.log('')
 
 // Check if version already exists
 console.log('Checking if version already exists on npm...')
+var checkVersionEnv = {}
+if (nodeAuthToken) {
+  checkVersionEnv.NODE_AUTH_TOKEN = nodeAuthToken
+}
 var checkVersion = childProcess.spawnSync('npm', ['view', packageName + '@' + versionToPublish, 'version'], {
   encoding: 'utf-8',
-  stdio: 'pipe'
+  stdio: 'pipe',
+  env: Object.assign({}, process.env, checkVersionEnv)
 })
 
 if (checkVersion.status === 0) {
@@ -230,10 +301,15 @@ console.log('')
 // Publish
 console.log('Publishing package...')
 console.log('')
+var publishEnv = {}
+if (nodeAuthToken) {
+  publishEnv.NODE_AUTH_TOKEN = nodeAuthToken
+}
 var publishProcess = childProcess.spawn('npm', ['publish', '--access', 'public'], {
   cwd: packageDir,
   stdio: 'inherit',
-  shell: true
+  shell: true,
+  env: Object.assign({}, process.env, publishEnv)
 })
 
 publishProcess.on('close', function (code) {
