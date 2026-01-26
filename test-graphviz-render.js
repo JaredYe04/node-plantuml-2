@@ -20,7 +20,6 @@ try {
 }
 var fs = require('fs')
 var path = require('path')
-var os = require('os')
 
 console.log('=== Graphviz 渲染测试 ===')
 console.log('')
@@ -141,11 +140,9 @@ function testDiagram(code, format, filename, testName) {
         
         // Check stderr for errors
         if (stderr) {
-          var hasStderrError = false
           var errorPatterns = ['ERROR', 'Error', 'Exception', 'cannot parse result', 'IllegalStateException']
           for (var i = 0; i < errorPatterns.length; i++) {
             if (stderr.includes(errorPatterns[i])) {
-              hasStderrError = true
               logTest(testName, false, 'Error in stderr: ' + stderr.substring(0, 300))
               resolve(false)
               return
@@ -156,15 +153,12 @@ function testDiagram(code, format, filename, testName) {
         // Validate image
         var isValid = validateImage(buffer, testName)
         
+        // Save image for inspection
+        var outputPath = path.join(outputDir, filename)
+        fs.writeFileSync(outputPath, buffer)
         if (isValid) {
-          // Save image for inspection
-          var outputPath = path.join(outputDir, filename)
-          fs.writeFileSync(outputPath, buffer)
           console.log('  Saved to:', outputPath)
         } else {
-          // Save anyway for debugging
-          var outputPath = path.join(outputDir, filename)
-          fs.writeFileSync(outputPath, buffer)
           console.log('  Saved (with errors) to:', outputPath)
         }
         

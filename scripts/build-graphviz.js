@@ -906,9 +906,9 @@ function buildGraphviz () {
         if (PLATFORM === 'linux' && libCopiedCount > 0) {
           console.log('')
           console.log('Copying system dependencies for dot executable...')
-          var depsCopied = copyDependenciesWithLdd(destDotPath, destLibDir)
-          if (depsCopied > 0) {
-            console.log('✓ Total dependencies copied:', depsCopied)
+          var depsCopiedLinux1 = copyDependenciesWithLdd(destDotPath, destLibDir)
+          if (depsCopiedLinux1 > 0) {
+            console.log('✓ Total dependencies copied:', depsCopiedLinux1)
           }
         }
       } else if (fs.existsSync(libDir)) {
@@ -928,9 +928,9 @@ function buildGraphviz () {
         if (PLATFORM === 'linux') {
           console.log('')
           console.log('Copying system dependencies for dot executable...')
-          var depsCopied = copyDependenciesWithLdd(destDotPath, destLibDir)
-          if (depsCopied > 0) {
-            console.log('✓ Total dependencies copied:', depsCopied)
+          var depsCopiedLinux = copyDependenciesWithLdd(destDotPath, destLibDir)
+          if (depsCopiedLinux > 0) {
+            console.log('✓ Total dependencies copied:', depsCopiedLinux)
           }
         }
         }
@@ -941,13 +941,13 @@ function buildGraphviz () {
       // Even if no Graphviz lib directory found, for Linux we should still copy dependencies
       if (PLATFORM === 'linux') {
         console.log('  No Graphviz lib directory found, but copying system dependencies...')
-        var destLibDir = path.join(graphvizDir, 'lib')
-        if (!fs.existsSync(destLibDir)) {
-          fs.mkdirSync(destLibDir, { recursive: true })
+        var destLibDirFallback = path.join(graphvizDir, 'lib')
+        if (!fs.existsSync(destLibDirFallback)) {
+          fs.mkdirSync(destLibDirFallback, { recursive: true })
         }
-        var depsCopied = copyDependenciesWithLdd(destDotPath, destLibDir)
-        if (depsCopied > 0) {
-          console.log('✓ Copied', depsCopied, 'system dependencies')
+        var depsCopiedFallback = copyDependenciesWithLdd(destDotPath, destLibDirFallback)
+        if (depsCopiedFallback > 0) {
+          console.log('✓ Copied', depsCopiedFallback, 'system dependencies')
         } else {
           console.log('  ⚠️  Warning: No dependencies copied - Graphviz may not work without system libraries')
       }

@@ -63,9 +63,9 @@ if (dotPath) {
   }
   
   // 检查 bin 目录中的 DLL
-  var binDir = path.dirname(dotPath)
-  if (fs.existsSync(binDir)) {
-    var dllFiles = fs.readdirSync(binDir).filter(function (f) {
+  var binDirCheck = path.dirname(dotPath)
+  if (fs.existsSync(binDirCheck)) {
+    var dllFiles = fs.readdirSync(binDirCheck).filter(function (f) {
       return f.toLowerCase().endsWith('.dll')
     })
     console.log('   DLL files in bin:', dllFiles.length)
@@ -82,14 +82,14 @@ var currentPath = process.env.PATH || ''
 var pathEntries = currentPath.split(';')
 console.log('   PATH entries:', pathEntries.length)
 if (dotPath) {
-  var binDir = path.dirname(dotPath).replace(/\//g, '\\')
+  var binDirPath = path.dirname(dotPath).replace(/\//g, '\\')
   var inPath = pathEntries.some(function (entry) {
-    return entry.replace(/\//g, '\\').toLowerCase() === binDir.toLowerCase()
+    return entry.replace(/\//g, '\\').toLowerCase() === binDirPath.toLowerCase()
   })
   console.log('   Graphviz bin in PATH:', inPath)
   if (!inPath) {
     console.log('   ⚠️  Graphviz bin directory NOT in PATH!')
-    console.log('   Should add:', binDir)
+    console.log('   Should add:', binDirPath)
   }
 }
 console.log('   PATH (first 300 chars):', currentPath.substring(0, 300))
@@ -105,10 +105,10 @@ if (dotPath) {
     
     // 设置环境变量
     var env = Object.assign({}, process.env)
-    var binDir = path.dirname(dotPath).replace(/\//g, '\\')
-    env.PATH = binDir + ';' + (env.PATH || '')
+    var binDirTest = path.dirname(dotPath).replace(/\//g, '\\')
+    env.PATH = binDirTest + ';' + (env.PATH || '')
     
-    console.log('   Testing with PATH:', binDir)
+    console.log('   Testing with PATH:', binDirTest)
     var dotOutput = childProcess.execSync('"' + dotPath + '" -Tpng "' + tempFile + '"', {
       encoding: 'buffer',
       env: env,

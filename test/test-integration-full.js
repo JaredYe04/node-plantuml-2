@@ -25,6 +25,9 @@ function getEnvWithLibPath (dotPath) {
   var libPath = dotResolver.getBundledGraphvizLibPath(dotPath)
   
   if (libPath) {
+    // Ensure libPath is absolute
+    libPath = path.resolve(libPath)
+    
     var platform = os.platform()
     if (platform === 'linux') {
       var existingLibPath = env.LD_LIBRARY_PATH || ''

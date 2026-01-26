@@ -7,3 +7,4 @@ test/fixtures/*.png
 /test/output
 /runtimes/@node-plantuml-2
 /test-output-graphviz
+/test-output-local
