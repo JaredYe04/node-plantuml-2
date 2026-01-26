@@ -626,26 +626,26 @@ jobs:
         if: matrix.platform == 'win32'
         shell: powershell
         run: |
-          Write-Host "📦 Installing Graphviz for package building on Windows..."
+          Write-Host "[INFO] Installing Graphviz for package building on Windows..."
           $ErrorActionPreference = 'Continue'
           $installed = $false
           
           # Method 1: Try Winget first (usually more reliable)
           if (Get-Command winget -ErrorAction SilentlyContinue) {
-            Write-Host "🔄 Attempting to install Graphviz via Winget..."
+            Write-Host "[INFO] Attempting to install Graphviz via Winget..."
             for ($i = 1; $i -le 3; $i++) {
               try {
                 $null = winget install Graphviz.Graphviz --accept-package-agreements --accept-source-agreements --silent 2>&1
                 if ($LASTEXITCODE -eq 0) {
-                  Write-Host "✅ Graphviz installed successfully via Winget"
+                  Write-Host "[OK] Graphviz installed successfully via Winget"
                   $installed = $true
                   break
                 }
               } catch {
-                Write-Host "⚠️  Winget attempt $i failed: $_"
+                Write-Host "[WARN] Winget attempt $i failed: $_"
               }
               if (-not $installed) {
-                Write-Host "⚠️  Winget attempt $i failed, retrying..."
+                Write-Host "[WARN] Winget attempt $i failed, retrying..."
                 Start-Sleep -Seconds 5
               }
             }
@@ -653,7 +653,7 @@ jobs:
           
           # Method 2: Try Chocolatey with retries (if Winget failed)
           if (-not $installed -and (Get-Command choco -ErrorAction SilentlyContinue)) {
-            Write-Host "🔄 Attempting to install Graphviz via Chocolatey..."
+            Write-Host "[INFO] Attempting to install Graphviz via Chocolatey..."
             for ($i = 1; $i -le 3; $i++) {
               try {
                 # Clear Chocolatey cache to avoid stale packages
@@ -663,17 +663,17 @@ jobs:
                 }
                 $output = choco install graphviz -y 2>&1
                 if ($LASTEXITCODE -eq 0) {
-                  Write-Host "✅ Graphviz installed successfully via Chocolatey"
+                  Write-Host "[OK] Graphviz installed successfully via Chocolatey"
                   $installed = $true
                   break
                 } else {
                   Write-Host "   Chocolatey output: $output"
                 }
               } catch {
-                Write-Host "⚠️  Chocolatey attempt $i failed: $_"
+                Write-Host "[WARN] Chocolatey attempt $i failed: $_"
               }
               if (-not $installed) {
-                Write-Host "⚠️  Chocolatey attempt $i failed, retrying in 10 seconds..."
+                Write-Host "[WARN] Chocolatey attempt $i failed, retrying in 10 seconds..."
                 Start-Sleep -Seconds 10
               }
             }
@@ -681,47 +681,47 @@ jobs:
           
           # Method 3: Direct download and install (fallback)
           if (-not $installed) {
-            Write-Host "🔄 Attempting to download and install Graphviz directly..."
+            Write-Host "[INFO] Attempting to download and install Graphviz directly..."
             $graphvizUrl = "https://gitlab.com/api/v4/projects/4207231/packages/generic/graphviz-releases/10.0.1/windows_10_cmake_Release_graphviz-install-10.0.1-win64.exe"
             $installerPath = Join-Path $env:TEMP "graphviz-installer.exe"
             
             try {
-              Write-Host "📥 Downloading Graphviz installer from $graphvizUrl..."
+              Write-Host "[INFO] Downloading Graphviz installer from $graphvizUrl..."
               Invoke-WebRequest -Uri $graphvizUrl -OutFile $installerPath -UseBasicParsing -TimeoutSec 300
-              Write-Host "📥 Downloaded Graphviz installer, installing..."
+              Write-Host "[INFO] Downloaded Graphviz installer, installing..."
               $process = Start-Process -FilePath $installerPath -ArgumentList "/S" -Wait -NoNewWindow -PassThru
               if ($process.ExitCode -eq 0) {
-                Write-Host "✅ Graphviz installed successfully via direct download"
+                Write-Host "[OK] Graphviz installed successfully via direct download"
                 $installed = $true
               } else {
-                Write-Host "⚠️  Installer exited with code $($process.ExitCode)"
+                Write-Host "[WARN] Installer exited with code $($process.ExitCode)"
               }
               Remove-Item $installerPath -ErrorAction SilentlyContinue
             } catch {
-              Write-Host "⚠️  Direct download failed: $_"
+              Write-Host "[WARN] Direct download failed: $_"
             }
           }
           
           if (-not $installed) {
-            Write-Host "❌ All installation methods failed"
-            Write-Host "⚠️  Please install Graphviz manually on Windows"
+            Write-Host "[ERROR] All installation methods failed"
+            Write-Host "[WARN] Please install Graphviz manually on Windows"
             exit 1
           }
           
           # Verify installation
           $dotPath = Get-Command dot -ErrorAction SilentlyContinue
           if ($dotPath) {
-            Write-Host "✅ Graphviz verified: $($dotPath.Source)"
+            Write-Host "[OK] Graphviz verified: $($dotPath.Source)"
             & $dotPath.Source -V
           } else {
-            Write-Host "⚠️  Warning: Graphviz installed but 'dot' command not found in PATH"
+            Write-Host "[WARN] Warning: Graphviz installed but 'dot' command not found in PATH"
             Write-Host "   Trying to refresh PATH..."
             $machinePath = [System.Environment]::GetEnvironmentVariable('Path', 'Machine')
             $userPath = [System.Environment]::GetEnvironmentVariable('Path', 'User')
             $env:Path = $machinePath + ';' + $userPath
             $dotPath = Get-Command dot -ErrorAction SilentlyContinue
             if ($dotPath) {
-              Write-Host "✅ Graphviz found after PATH refresh: $($dotPath.Source)"
+              Write-Host "[OK] Graphviz found after PATH refresh: $($dotPath.Source)"
             }
           }
 

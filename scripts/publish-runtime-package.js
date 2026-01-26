@@ -190,6 +190,7 @@ if (DRY_RUN) {
 
 // Configure npm authentication if NODE_AUTH_TOKEN is available
 var nodeAuthToken = process.env.NODE_AUTH_TOKEN
+var npmrcPath = null
 if (nodeAuthToken) {
   console.log('Configuring npm authentication from NODE_AUTH_TOKEN...')
   // Use npm config set to configure authentication token
@@ -206,7 +207,17 @@ if (nodeAuthToken) {
     })
     
     if (configResult.status === 0) {
-      console.log('✓ npm authentication configured')
+      console.log('✓ npm authentication configured via npm config')
+      // Get the actual .npmrc path that npm uses
+      var getNpmrcPath = childProcess.spawnSync('npm', ['config', 'get', 'userconfig'], {
+        encoding: 'utf-8',
+        stdio: 'pipe',
+        shell: os.platform() === 'win32'
+      })
+      if (getNpmrcPath.status === 0 && getNpmrcPath.stdout) {
+        npmrcPath = getNpmrcPath.stdout.trim()
+        console.log('   .npmrc location:', npmrcPath)
+      }
     } else {
       console.error('⚠️  Warning: Could not configure npm authentication via npm config')
       if (configResult.stderr) {
@@ -217,11 +228,34 @@ if (nodeAuthToken) {
       }
       // Fallback: try to write .npmrc directly
       try {
-        var npmrcPath = path.join(os.homedir(), '.npmrc')
-        // On Windows, also try USERPROFILE if HOME is not set
-        if (os.platform() === 'win32' && !process.env.HOME) {
-          npmrcPath = path.join(process.env.USERPROFILE || os.homedir(), '.npmrc')
+        // First, try to get the actual .npmrc path from npm
+        var getNpmrcPath = childProcess.spawnSync('npm', ['config', 'get', 'userconfig'], {
+          encoding: 'utf-8',
+          stdio: 'pipe',
+          shell: os.platform() === 'win32'
+        })
+        if (getNpmrcPath.status === 0 && getNpmrcPath.stdout && getNpmrcPath.stdout.trim()) {
+          npmrcPath = getNpmrcPath.stdout.trim()
+        } else {
+          // Fallback: determine .npmrc path - try multiple locations on Windows
+          var possiblePaths = []
+          if (os.platform() === 'win32') {
+            // Windows: try USERPROFILE first, then HOME, then os.homedir()
+            if (process.env.USERPROFILE) {
+              possiblePaths.push(path.join(process.env.USERPROFILE, '.npmrc'))
+            }
+            if (process.env.HOME) {
+              possiblePaths.push(path.join(process.env.HOME, '.npmrc'))
+            }
+            possiblePaths.push(path.join(os.homedir(), '.npmrc'))
+          } else {
+            possiblePaths.push(path.join(os.homedir(), '.npmrc'))
+          }
+          
+          // Try to find existing .npmrc or use first path
+          npmrcPath = possiblePaths.find(function (p) { return fs.existsSync(p) }) || possiblePaths[0]
         }
+        
         var authLine = '//registry.npmjs.org/:_authToken=' + nodeAuthToken + '\n'
         var existingContent = ''
         if (fs.existsSync(npmrcPath)) {
@@ -237,9 +271,19 @@ if (nodeAuthToken) {
         fs.writeFileSync(npmrcPath, filteredLines.join('\n') + '\n')
         console.log('✓ npm authentication configured (fallback method)')
         console.log('   .npmrc location:', npmrcPath)
+        
+        // Verify the file was written correctly
+        if (fs.existsSync(npmrcPath)) {
+          var writtenContent = fs.readFileSync(npmrcPath, 'utf8')
+          if (writtenContent.includes('_authToken')) {
+            console.log('   ✓ Verified .npmrc contains auth token')
+          } else {
+            console.error('   ⚠️  Warning: .npmrc written but auth token not found')
+          }
+        }
       } catch (e) {
         console.error('⚠️  Warning: Could not write .npmrc file:', e.message)
-        console.error('   File path attempted:', npmrcPath)
+        console.error('   File path attempted:', npmrcPath || 'unknown')
         console.error('   Continuing anyway...')
       }
     }
@@ -256,11 +300,45 @@ var loginCheckEnv = {}
 if (nodeAuthToken) {
   loginCheckEnv.NODE_AUTH_TOKEN = nodeAuthToken
 }
-var loginCheck = childProcess.spawnSync('npm', ['whoami'], {
-  encoding: 'utf-8',
-  stdio: 'pipe',
-  env: Object.assign({}, process.env, loginCheckEnv)
-})
+
+// Retry mechanism for npm whoami (sometimes needs a moment after .npmrc is written)
+var loginCheck = null
+var maxRetries = 3
+var retryDelay = 1000 // 1 second
+
+for (var retry = 0; retry < maxRetries; retry++) {
+  if (retry > 0) {
+    console.log('   Retrying npm whoami... (attempt ' + (retry + 1) + '/' + maxRetries + ')')
+    // Wait a bit before retrying (especially on Windows, file system might need a moment)
+    var start = Date.now()
+    while (Date.now() - start < retryDelay) {
+      // Busy wait (simple delay)
+    }
+  }
+  
+  loginCheck = childProcess.spawnSync('npm', ['whoami', '--registry=https://registry.npmjs.org/'], {
+    encoding: 'utf-8',
+    stdio: 'pipe',
+    env: Object.assign({}, process.env, loginCheckEnv),
+    shell: os.platform() === 'win32'
+  })
+  
+  if (loginCheck.status === 0) {
+    break // Success!
+  }
+  
+  // If we have .npmrc path, verify it exists and has content
+  if (npmrcPath && fs.existsSync(npmrcPath)) {
+    var npmrcContent = fs.readFileSync(npmrcPath, 'utf8')
+    if (npmrcContent.includes('_authToken')) {
+      console.log('   .npmrc file exists and contains auth token')
+    } else {
+      console.error('   ⚠️  .npmrc exists but missing auth token')
+    }
+  } else if (npmrcPath) {
+    console.error('   ⚠️  .npmrc file not found at:', npmrcPath)
+  }
+}
 
 if (loginCheck.status !== 0) {
   console.error('❌ Error: Not logged in to npm')
@@ -273,8 +351,25 @@ if (loginCheck.status !== 0) {
   console.error('')
   console.error('Troubleshooting:')
   console.error('  1. Ensure NODE_AUTH_TOKEN environment variable is set')
-  console.error('  2. Check that .npmrc file exists and contains authentication token')
+  if (npmrcPath) {
+    console.error('  2. Check that .npmrc file exists at:', npmrcPath)
+    if (fs.existsSync(npmrcPath)) {
+      console.error('     File exists. Contents (sanitized):')
+      try {
+        var content = fs.readFileSync(npmrcPath, 'utf8')
+        var sanitized = content.replace(/_authToken=[^\n]+/g, '_authToken=***')
+        console.error('     ' + sanitized.split('\n').filter(function (l) { return l.trim() }).join('\n     '))
+      } catch (e) {
+        console.error('     Could not read file:', e.message)
+      }
+    } else {
+      console.error('     File does not exist')
+    }
+  } else {
+    console.error('  2. Check that .npmrc file exists and contains authentication token')
+  }
   console.error('  3. Try running: npm login')
+  console.error('  4. On Windows, ensure USERPROFILE environment variable is set')
   process.exit(1)
 }
 
