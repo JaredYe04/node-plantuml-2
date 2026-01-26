@@ -370,34 +370,34 @@ jobs:
         if: matrix.platform == 'win32'
         shell: powershell
         run: |
-          Write-Host "🔧 Configuring npm authentication for Windows..."
-          $token = "${{ secrets.NPM_TOKEN }}"
+          Write-Host 'Configuring npm authentication for Windows...'
+          $token = '${{ secrets.NPM_TOKEN }}'
           if ([string]::IsNullOrEmpty($token)) {
-            Write-Host "❌ Error: NODE_AUTH_TOKEN is not set"
+            Write-Host 'Error: NODE_AUTH_TOKEN is not set'
             exit 1
           }
           
           # Method 1: Try npm config set
-          Write-Host "Attempting to configure via npm config..."
-          $configKey = "//registry.npmjs.org/:_authToken"
+          Write-Host 'Attempting to configure via npm config...'
+          $configKey = '//registry.npmjs.org/:_authToken'
           $result = npm config set $configKey $token 2>&1
           if ($LASTEXITCODE -eq 0) {
-            Write-Host "✅ npm authentication configured via npm config"
+            Write-Host 'npm authentication configured via npm config'
           } else {
-            Write-Host "⚠️  npm config failed, trying direct .npmrc write..."
+            Write-Host 'npm config failed, trying direct .npmrc write...'
             # Method 2: Write .npmrc directly
-            $npmrcPath = Join-Path $env:USERPROFILE ".npmrc"
+            $npmrcPath = Join-Path $env:USERPROFILE '.npmrc'
             $authLine = "//registry.npmjs.org/:_authToken=$token"
             
             # Read existing content if it exists
-            $existingContent = ""
+            $existingContent = ''
             if (Test-Path $npmrcPath) {
               $existingContent = Get-Content $npmrcPath -Raw
             }
             
             # Remove any existing auth token lines
             $lines = $existingContent -split "`n" | Where-Object { 
-              $_ -notmatch "//registry\.npmjs\.org/:_authToken" 
+              $_ -notmatch '//registry\.npmjs\.org/:_authToken' 
             }
             
             # Add new auth token
@@ -408,24 +408,24 @@ jobs:
             
             try {
               Set-Content -Path $npmrcPath -Value $newContent -NoNewline
-              Write-Host "✅ npm authentication configured via .npmrc file"
+              Write-Host 'npm authentication configured via .npmrc file'
             } catch {
-              Write-Host "❌ Error writing .npmrc: $_"
+              Write-Host "Error writing .npmrc: $_"
               exit 1
             }
           }
           
           # Verify .npmrc exists and contains token
-          $npmrcPath = Join-Path $env:USERPROFILE ".npmrc"
+          $npmrcPath = Join-Path $env:USERPROFILE '.npmrc'
           if (Test-Path $npmrcPath) {
             $content = Get-Content $npmrcPath -Raw
-            if ($content -match "_authToken") {
-              Write-Host "✅ .npmrc file verified"
+            if ($content -match '_authToken') {
+              Write-Host '.npmrc file verified'
             } else {
-              Write-Host "⚠️  Warning: .npmrc exists but no auth token found"
+              Write-Host 'Warning: .npmrc exists but no auth token found'
             }
           } else {
-            Write-Host "⚠️  Warning: .npmrc file not found"
+            Write-Host 'Warning: .npmrc file not found'
           }
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -716,7 +716,9 @@ jobs:
           } else {
             Write-Host "⚠️  Warning: Graphviz installed but 'dot' command not found in PATH"
             Write-Host "   Trying to refresh PATH..."
-            $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+            $machinePath = [System.Environment]::GetEnvironmentVariable('Path', 'Machine')
+            $userPath = [System.Environment]::GetEnvironmentVariable('Path', 'User')
+            $env:Path = $machinePath + ';' + $userPath
             $dotPath = Get-Command dot -ErrorAction SilentlyContinue
             if ($dotPath) {
               Write-Host "✅ Graphviz found after PATH refresh: $($dotPath.Source)"
@@ -856,34 +858,34 @@ jobs:
         if: matrix.platform == 'win32'
         shell: powershell
         run: |
-          Write-Host "🔧 Configuring npm authentication for Windows..."
-          $token = "${{ secrets.NPM_TOKEN }}"
+          Write-Host 'Configuring npm authentication for Windows...'
+          $token = '${{ secrets.NPM_TOKEN }}'
           if ([string]::IsNullOrEmpty($token)) {
-            Write-Host "❌ Error: NODE_AUTH_TOKEN is not set"
+            Write-Host 'Error: NODE_AUTH_TOKEN is not set'
             exit 1
           }
           
           # Method 1: Try npm config set
-          Write-Host "Attempting to configure via npm config..."
-          $configKey = "//registry.npmjs.org/:_authToken"
+          Write-Host 'Attempting to configure via npm config...'
+          $configKey = '//registry.npmjs.org/:_authToken'
           $result = npm config set $configKey $token 2>&1
           if ($LASTEXITCODE -eq 0) {
-            Write-Host "✅ npm authentication configured via npm config"
+            Write-Host 'npm authentication configured via npm config'
           } else {
-            Write-Host "⚠️  npm config failed, trying direct .npmrc write..."
+            Write-Host 'npm config failed, trying direct .npmrc write...'
             # Method 2: Write .npmrc directly
-            $npmrcPath = Join-Path $env:USERPROFILE ".npmrc"
+            $npmrcPath = Join-Path $env:USERPROFILE '.npmrc'
             $authLine = "//registry.npmjs.org/:_authToken=$token"
             
             # Read existing content if it exists
-            $existingContent = ""
+            $existingContent = ''
             if (Test-Path $npmrcPath) {
               $existingContent = Get-Content $npmrcPath -Raw
             }
             
             # Remove any existing auth token lines
             $lines = $existingContent -split "`n" | Where-Object { 
-              $_ -notmatch "//registry\.npmjs\.org/:_authToken" 
+              $_ -notmatch '//registry\.npmjs\.org/:_authToken' 
             }
             
             # Add new auth token
@@ -894,24 +896,24 @@ jobs:
             
             try {
               Set-Content -Path $npmrcPath -Value $newContent -NoNewline
-              Write-Host "✅ npm authentication configured via .npmrc file"
+              Write-Host 'npm authentication configured via .npmrc file'
             } catch {
-              Write-Host "❌ Error writing .npmrc: $_"
+              Write-Host "Error writing .npmrc: $_"
               exit 1
             }
           }
           
           # Verify .npmrc exists and contains token
-          $npmrcPath = Join-Path $env:USERPROFILE ".npmrc"
+          $npmrcPath = Join-Path $env:USERPROFILE '.npmrc'
           if (Test-Path $npmrcPath) {
             $content = Get-Content $npmrcPath -Raw
-            if ($content -match "_authToken") {
-              Write-Host "✅ .npmrc file verified"
+            if ($content -match '_authToken') {
+              Write-Host '.npmrc file verified'
             } else {
-              Write-Host "⚠️  Warning: .npmrc exists but no auth token found"
+              Write-Host 'Warning: .npmrc exists but no auth token found'
             }
           } else {
-            Write-Host "⚠️  Warning: .npmrc file not found"
+            Write-Host 'Warning: .npmrc file not found'
           }
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
