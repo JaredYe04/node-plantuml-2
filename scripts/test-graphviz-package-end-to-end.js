@@ -214,16 +214,19 @@ for (var i = 0; i < testDiagrams.length; i++) {
       absoluteDotPath = absoluteDotPath.replace(/\//g, '\\')
     }
     
+    // Use absolute path for input file (PlantUML may need it)
+    var absoluteInputFile = path.resolve(inputFile)
+    
     var plantumlArgs = [
       '-Djava.awt.headless=true',
       '-Dfile.encoding=UTF-8',
       '-jar', plantumlJar,
       '-t' + test.format,
+      '-o', OUTPUT_DIR,
       '-graphvizdot', absoluteDotPath,
-      inputFile
+      absoluteInputFile
     ]
     
-    // Execute PlantUML
     var result = childProcess.spawnSync(javaPath, plantumlArgs, {
       cwd: OUTPUT_DIR,
       env: env,
@@ -232,21 +235,44 @@ for (var i = 0; i < testDiagrams.length; i++) {
       timeout: 30000
     })
     
-    // Log stderr for debugging (PlantUML often outputs warnings to stderr)
+    // Always log stderr and stdout for debugging when test fails
     if (result.stderr && result.stderr.length > 0) {
-      var stderrLines = result.stderr.split('\n').slice(0, 5) // First 5 lines
-      var hasError = stderrLines.some(function (line) {
-        return line.toLowerCase().includes('error') || 
-               line.toLowerCase().includes('exception') ||
-               line.toLowerCase().includes('cannot')
-      })
-      if (hasError) {
-        console.log('  ⚠️  PlantUML stderr:', stderrLines.join('; '))
+      var stderrText = result.stderr.trim()
+      if (stderrText.length > 0) {
+        console.log('  📋 PlantUML stderr:')
+        var stderrLines = stderrText.split('\n')
+        stderrLines.slice(0, 20).forEach(function (line) {
+          console.log('     ' + line)
+        })
+        if (stderrLines.length > 20) {
+          console.log('     ... (' + (stderrLines.length - 20) + ' more lines)')
+        }
       }
     }
     
+    if (result.stdout && result.stdout.length > 0) {
+      var stdoutText = result.stdout.trim()
+      if (stdoutText.length > 0) {
+        console.log('  📋 PlantUML stdout:')
+        var stdoutLines = stdoutText.split('\n')
+        stdoutLines.slice(0, 20).forEach(function (line) {
+          console.log('     ' + line)
+        })
+        if (stdoutLines.length > 20) {
+          console.log('     ... (' + (stdoutLines.length - 20) + ' more lines)')
+        }
+      }
+    }
+    
+    // Log exit code
+    if (result.status !== 0) {
+      console.log('  ⚠️  PlantUML exited with code:', result.status)
+    }
+    
     // Check if output file was created
-    var expectedOutput = path.join(OUTPUT_DIR, path.basename(inputFile, '.puml') + '.' + test.format)
+    // PlantUML creates output file with same name as input file (without .puml extension)
+    var inputBaseName = path.basename(inputFile, '.puml')
+    var expectedOutput = path.join(OUTPUT_DIR, inputBaseName + '.' + test.format)
     if (fs.existsSync(expectedOutput)) {
       // Move to desired location
       if (expectedOutput !== outputFile) {
@@ -273,11 +299,39 @@ for (var i = 0; i < testDiagrams.length; i++) {
         failCount++
       }
     } else {
+      // Output file not created - provide detailed error info
       var errorMsg = 'Output file not created'
-      if (result.stderr) {
-        errorMsg += ': ' + result.stderr.substring(0, 200)
+      
+      // Check if PlantUML produced any error messages
+      if (result.stderr && result.stderr.trim().length > 0) {
+        var stderrLines = result.stderr.trim().split('\n')
+        // Look for common error patterns
+        var errorPatterns = ['error', 'exception', 'cannot', 'failed', 'not found', 'no such']
+        var foundError = stderrLines.find(function (line) {
+          var lowerLine = line.toLowerCase()
+          return errorPatterns.some(function (pattern) {
+            return lowerLine.includes(pattern)
+          })
+        })
+        if (foundError) {
+          errorMsg += ': ' + foundError.trim()
+        } else if (stderrLines.length > 0) {
+          errorMsg += ': ' + stderrLines[0].trim()
+        }
+      } else if (result.status !== 0) {
+        errorMsg += ' (exit code: ' + result.status + ')'
+      } else {
+        errorMsg += ': No diagram found'
       }
+      
       console.log('  ❌ Failed:', errorMsg)
+      
+      // Also log the command that was run for debugging
+      console.log('  🔍 Command:', javaPath, plantumlArgs.join(' '))
+      console.log('  🔍 Expected output:', expectedOutput)
+      console.log('  🔍 Input file:', absoluteInputFile)
+      console.log('  🔍 Input file exists:', fs.existsSync(absoluteInputFile))
+      
       testResults.push({
         name: testName,
         success: false,
